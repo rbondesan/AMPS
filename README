@@ -1,0 +1,43 @@
+Description:
+-----------
+
+MPS-based numerical tools to diagonalize Hamiltonians of anyonic spin
+chains.
+
+modules/SU2k_MPS.py implements the class of anyonic matrix product
+states (AMPS)
+
+modules/functions.py contains the functions used in the itebd
+algorithm.
+
+In principle, general anyonic models can be handled. Here used and
+tested only for SU2 level k anyonic models based on spin 1/2.
+
+Written in python3.
+
+Run:
+----
+
+python3 SU2k_iTEBD.py -p 4 -N 1000 -D 40 -t 0.01 -a 1 -b 1
+
+See helper of SU2k_iTEBD for description of arguments.
+
+To compute observables: 
+
+EE_vs_D.py: computes the spectrum of transfer matrix, entanglement
+entropy and energy
+
+corr.py: computes correlation functions
+
+Version and testing:
+-------------------
+
+Tested on Mac Os Sierra, Ubuntu 14.10, Windows 10
+
+Version: beta
+
+Acknowledgement:
+---------------
+
+The class SU2k_MPS is inspired by the AbelianTensor class of
+1512-03846
