@@ -29,6 +29,12 @@ entropy and energy
 
 corr.py: computes correlation functions
 
+GUI:
+----
+
+The program can be run also with a graphical user interface defined in gui.py.
+It is written in PyQt5 (under GPL) and requires installation of this package.
+
 Version and testing:
 -------------------
 
