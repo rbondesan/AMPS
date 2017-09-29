@@ -16,18 +16,18 @@ import modules.SU2k_data as SU2k_data
 
 def main(D):
     # set global parameters
-    x1 = 0 #=0 or 1
-    xN = 1
+    x1 = 1 #=0 or 1
+    xN = 100
     hmax = 4
-    dt = 0.01
+    dt = 1e-04
     eps = 1e-6
-    #
-    myOp1=funcs.act_order_par_m3
-    myOp1_name = 'm3'
-    my_n_heights1=1
-    myOp2=funcs.act_order_par_m3
-    myOp2_name = 'm3'
-    my_n_heights2=1
+    # 
+    myOp1=funcs.act_F1
+    myOp1_name = 'F1'
+    my_n_heights1=5
+    myOp2=funcs.act_F1
+    myOp2_name = 'F1'
+    my_n_heights2=5
     # and pars
     pars = {}
     pars['chi'] = D
@@ -37,7 +37,12 @@ def main(D):
 
     # loop over boundary conditions a.
     # add the result to corr with the right factor S_a^2
-    N = xN-1
+    if my_n_heights1 == 1:
+        N = xN-1
+    elif my_n_heights1 == 4:
+        N = xN-3
+    elif my_n_heights1 == 5:
+        N = xN-3
     corr = np.zeros(N)
     Vev_Op1 = 0
     Vev_Op2_ev = 0
@@ -84,6 +89,16 @@ def main(D):
     print("In corr_new: <Op2>",Vev_Op2_ev,Vev_Op2_odd)        
     if my_n_heights1 == 1 and my_n_heights2 == 1:
         # subtracted 1 pf. start from x=2 which is even
+        corr[::2] -= Vev_Op1 * Vev_Op2_ev
+        corr[1::2] -= Vev_Op1 * Vev_Op2_odd
+    elif my_n_heights1 == 4 and my_n_heights2 == 4:
+        # subtracted 1 pf. start from x=5 which is odd, but 
+        # according to transfer operator, uses even parity E.
+        corr[::2] -= Vev_Op1 * Vev_Op2_ev
+        corr[1::2] -= Vev_Op1 * Vev_Op2_odd
+    elif my_n_heights1 == 5 and my_n_heights2 == 5:
+        # subtracted 1 pf. start from x=5 which is odd, but 
+        # according to transfer operator, uses even parity E.
         corr[::2] -= Vev_Op1 * Vev_Op2_ev
         corr[1::2] -= Vev_Op1 * Vev_Op2_odd
     else:

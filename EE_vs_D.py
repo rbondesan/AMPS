@@ -10,47 +10,31 @@ It calls routines defined in package modules/
 import sys
 import numpy as np
 import pickle
-from modules import functions
+from modules import functions,SU2k_data
 
 def main():
     # Lists
-    D_list = range(20,105,10) 
+    D_list = range(10,70,10) #list(range(10,52,2))+[60,70,80] 
     logxi_list = []
     EE_list = []
     log_corr_lens_list = []
     # Model global vars
     pars = {}
-    pars['hmax'] = 5
-    pars['dt'] = 0.00001
-    pars['eps'] = 1e-8
+    pars['hmax'] = 4
+    pars['dt'] = 1e-01
+    pars['eps'] = 1e-12
+    # boundary condition
+    bc = 1
+    pars['height0'] = bc
+    pars['heightL'] = bc
     # number of eigenvalues of E to be computed
-    n_corr_lens = 2 
+    n_corr_lens = 5
 
     for cur_D in D_list:
         print("In EE_vs_D: cur_D ", cur_D)
         # read data
         pars['chi'] = cur_D
-        file_name = 'init/SU2k_itebd_'
-        file_name += 'hmax_'+str(pars['hmax'])+'_'
-        file_name += 'chi_'+str(cur_D)+'_'
-        file_name += 'dt_'+str(pars['dt'])+'_'
-        file_name += 'eps_'+'{:.0e}'.format(pars['eps'])
-        try:
-            # Uses the modified itebd matrices
-            with open(file_name, 'rb') as f:                    
-                AA = pickle.load(f)
-                lA = pickle.load(f)
-                AB = pickle.load(f)
-                lB = pickle.load(f)
-                A1 = pickle.load(f)
-                A2 = pickle.load(f)
-                Lold_t = pickle.load(f)
-                B1 = pickle.load(f)
-                B2 = pickle.load(f)
-            print('init: from file', file_name)
-        except IOError:
-            print('IOError: file ', file_name, ' not found. Exiting.')
-            sys.exit(1)
+        lA,lB,AA,AB,A1,A2,Lold_t,B1,B2=functions.read_from_file_mod(pars)
 
         # The wave function is
         # A1.A2.A1.A2 ... A1.A2 Lold_t B1.B2.B1.B2 ...
@@ -67,7 +51,7 @@ def main():
         cur_corr_lens = np.real(cur_corr_lens[0:-1])#up to the last which is infty.
         cur_xi = max(cur_corr_lens) 
         print("log corr lens ", np.log(cur_corr_lens))
-        print("cur_xi ", cur_xi)
+        print("* cur_xi ", cur_xi)
         # Compute EE
         cur_EE = functions.get_EEent_mixed_repr(Lold_t)
         print("log(xi) vs EE ", np.log(cur_xi), cur_EE)
@@ -77,15 +61,18 @@ def main():
         EE_list.append(cur_EE)
     
         # Print the bond energy as a check
+        e_infty = SU2k_data.e_infty(pars['hmax'])
         En_0 = functions.one_point_function(A1,A2,Lold_t,n_heights=3,parity=0,
                                             act_Op=functions.act_TL_gen)
         En_1 = functions.one_point_function(A1,A2,Lold_t,n_heights=3,parity=1,
                                             act_Op=functions.act_TL_gen)
-        print("Bond energy: ", np.mean([En_0,En_1]))
+        print("Bond energy: ", np.mean([En_0,En_1]), ". Exact: ", e_infty)
+        print("* Delta bond energy: ", np.mean([En_0,En_1]) - e_infty)
         # Go to next D
 
     # Print to a handy file to analyze
-    out_file_name = 'results/SU2k_itebd_logxi_vs_EE_hmax_'+str(pars['hmax'])+'_'
+    out_file_name = 'results/SU2k_itebd_logxi_vs_EE_hmax_'+str(pars['hmax'])+\
+        '_a_'+str(pars['height0'])+'_b_'+str(pars['heightL'])+'_'
     if len(D_list) == 1:
         out_file_name += 'chi_'+str(cur_D)+'_'
     else:
@@ -100,7 +87,8 @@ def main():
     f.close()
     print('saved to file ', out_file_name)
     # 
-    out_file_name = 'results/SU2k_itebd_chi_vs_log_corr_lens_hmax_'+str(pars['hmax'])+'_'
+    out_file_name = 'results/SU2k_itebd_chi_vs_log_corr_lens_hmax_'+str(pars['hmax'])+\
+        '_a_'+str(pars['height0'])+'_b_'+str(pars['heightL'])+'_'
     if len(D_list) == 1:
         out_file_name += 'chi_'+str(cur_D)+'_'
     else:

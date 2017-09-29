@@ -3,7 +3,7 @@
 """
 
 import argparse
-from modules.functions import init_itebd, init_itebd_mod, recursion, recursion_mod, save_to_file, save_to_file_mod
+from modules.functions import init_itebd_mod, recursion_mod, save_to_file_mod
     
 def main(pars, max_it, save):
     """Performs the recursion to compute the cell matrices

@@ -44,6 +44,9 @@ class SU2kMPS:
     _0_|_2_|_4_|_6_ ...
 
 
+    Time direction is fixed to flow right and upwards, so that we
+    rotated the usual pictures of fusion trees 45 degrees clockwise.
+
     Note: the internal horizontal legs carry physical indices, the
     heights, and the auxiliary, multiplicity, indices are summed
     over. Therefore, their shape (see below) is [1], since already
@@ -60,7 +63,8 @@ class SU2kMPS:
     elements of the dims, so that heights[i][j] and shape[i][j] are the
     qnum and dimension of the same block. 
 
-    REMOVED (Our anyons are self-dual)
+    REMOVED (Direction is fixed and dualities are managed by hand. 
+    Shall we reintroduce it later?)
     dirs: A list of integers -1 or 1, one for each leg. 1 means 
     that the corresponding leg is outgoing, -1 means incoming.
 
@@ -617,6 +621,14 @@ class SU2kMPS:
         res.dtype = np.float_
         return res
 
+    def is_real(self):
+        """ Returns true if all the values are real.
+        """
+        for v in self.sects.values():
+            if np.all(np.isreal(v)) == False:
+                return False
+        return True
+    
     ##
     def imag(self):
         res = self.defer_unary_elementwise(np.imag)
@@ -757,16 +769,19 @@ class SU2kMPS:
         except TypeError:
             return dim
 
+    # TODO
     ##
-    def norm_sq(self):
-        conj = self.conj()
-        all_inds = tuple(range(len(self.shape)))
-        norm_sq = self.dot(conj, (all_inds, all_inds))
-        return np.abs(norm_sq.value())
+    # def norm_sq(self):
+    #     conj = self.conj()
+    #     all_inds = tuple(range(len(self.shape)))
+    #     norm_sq = self.dot(conj, (all_inds, all_inds))
+    #     return np.abs(norm_sq.value())
 
-    ##
-    def norm(self):
-        return np.sqrt(self.norm_sq())
+    # def dot(self,A):
+    
+    # ##
+    # def norm(self):
+    #     return np.sqrt(self.norm_sq())
 
     ##
     def transpose(self, p=(1,0)):
@@ -812,13 +827,18 @@ class SU2kMPS:
         return res
 
     ##
+    def is_vec_like(self):
+        """ Returns True if self is vec-like
+        """
+        return len(self.shape) == 1
+
     def is_mat_like(self):
         """ Returns True if self is mat-like
         """
         x = self.shape[1] == [1]
         y = self.heights[1] == [1]
-        return x and y
-
+        return x and y and (len(self.shape) == 3)
+    
     ##
     def is_2_sites(self):
         """ Returns True if self is 2 sites MPS
@@ -1015,7 +1035,7 @@ class SU2kMPS:
 
         """
         # First, find what chi will be.
-        S = -np.sort(-np.abs(S)) # sort so that -biggest first.
+        S = -np.sort(-np.abs(S)) # sort so that biggest first.
 #        print("In find_trunc_dim: S =",S)
         if norm_type=="frobenius":
             # later take square root
@@ -1038,7 +1058,7 @@ class SU2kMPS:
                         else:
                             break
                 sum_disc = sum(S[chi:])
-                rel_err = sum_disc/sum_all # relative error
+                rel_err = sum_disc/sum_all # relative error on the norm of wf
                 if rel_err <= eps: # recall, also eps is squared so ok comparison
                     break
             if norm_type=="frobenius":
@@ -1067,7 +1087,7 @@ class SU2kMPS:
                 # All the dimensions are fully included.
                 break
             dims[key] += 1
-            this_key_els = S_sects[key][0] # sing value for this key
+            this_key_els = S_sects[key] # sing value for this key
             if dims[key] < len(this_key_els):
                 # take next element and push it to the heap
                 next_el = this_key_els[dims[key]]
@@ -1111,6 +1131,9 @@ class SU2kMPS:
         i=0,j=1 or j=L-2,i=L-1 where L is the number of indices,
         and the shape of j can only be = [1]. 
         
+        If inds=(0,1), then apply A to dualize leg 1, and multply
+        the sectors by appropriate F matrix.
+        
         The method returns the fused MPS where the j index has height
         = 1 if remove_inds=False. If True, removes i and j.
         
@@ -1144,8 +1167,16 @@ class SU2kMPS:
         # order keeps memory of values hi contributing to new_k
         order = {}
         for k in valid_ks:
-            v = self[k]
             hi = k[i] 
+            v = self[k]
+            if i == 0:
+                # value multiplied by F symbol and sqrt(d_2)
+                theta = np.sqrt(SU2k_data.qdim(self.hmax,k[j]))*\
+                        SU2k_data.Fmat(k[next_pos],k[j],k[j],k[next_pos],hi,1,self.hmax)
+            else:
+                theta = 1
+            
+            # get new sector
             new_k = list(k)
             if erase_inds:
                 if i == 0:
@@ -1159,12 +1190,12 @@ class SU2kMPS:
             new_k = tuple(new_k)  
             if new_k in new_sects:
                 # already exists, concatenate at the end, i is the axis
-                new_sects[new_k] = np.concatenate((new_sects[new_k], v), axis = i)
+                new_sects[new_k] = np.concatenate((new_sects[new_k], v*theta), axis = i)
                 order[new_k].append(hi)
             else:
-                new_sects[new_k] = v
+                new_sects[new_k] = v*theta
                 order[new_k] = [hi]
-        
+
         # transpose according to canonical order:
         for new_k in new_sects:
             cur_order = order[new_k]
@@ -1192,6 +1223,7 @@ class SU2kMPS:
                 else: #nothing, just continue
                     continue
             else: # rearrange and if erase indices, change shape, TODO: check
+                # never been here.
                 print("**In SU2kMPS.fuse: key, order not match, rearrange:")
 #                print(cur_order, list(can_order))
                 v = new_sects[new_k]
@@ -1285,6 +1317,9 @@ class SU2kMPS:
         new_sects[order[k],new_h_j,...]=sects[k][new_dim_i[order[k]]
         order is the canonical order given by fusion_range
 
+        If inds=(0,1) then split and apply A^-1 to dualize leg 1 to 
+        original charge and direction.
+
         The method returns the split MPS and is understood to be used
         on MPS which have been processed previously by fuse.
         
@@ -1320,8 +1355,15 @@ class SU2kMPS:
                 end = start + new_dim_i[new_h_i.index(l)]
                 # slice along axis 0 which is i since rolled
                 tmp_sect = v[start:end]
+                if i == 0:
+                    # value multiplied by F symbol and sqrt(d_2)
+                    theta = np.sqrt(SU2k_data.qdim(self.hmax,a)) *\
+                            SU2k_data.Fmat(l,a,a,l,1,new_k[2],self.hmax)
+                else:
+                    theta = 1
+                
                 # rollaxis back
-                new_sects[new_k] = np.rollaxis(tmp_sect, 0, i+1)
+                new_sects[new_k] = np.rollaxis(tmp_sect*theta, 0, i+1)
                 start = end
 
         # Compute the new shape and heights
@@ -1345,6 +1387,8 @@ class SU2kMPS:
         vec . mat-like, vec . mat-like -> vec
         mat . mat -> mat
 
+        Uses inner product given by qtrace when computing vec . vec
+
         """
         assert(self.hmax == other.hmax)
 
@@ -1360,7 +1404,7 @@ class SU2kMPS:
             res_invar = self.invar and other.invar
 
             # Vector times vector -> scalar
-            if len(self.shape) == 1 and len(other.shape) == 1:
+            if self.is_vec_like() and other.is_vec_like():
                 assert(self.compatible_indices(other, 0, 0))
                 res = 0
                 for h in self.heights[0]:
@@ -1371,7 +1415,8 @@ class SU2kMPS:
                         continue
                     prod = np.dot(a,b)
                     if prod:
-                        res += np.dot(a,b)
+                        # qdim for closing loop of anyon type h
+                        res += np.dot(a,b) * SU2k_data.qdim(hmax,h)
                 res = type(self)([], heights=[], hmax=self.hmax, sects={},
                                  defval=res, dtype=res_dtype,
                                  charge=res_charge, invar=res_invar)
@@ -1379,7 +1424,7 @@ class SU2kMPS:
                 res_sects = {}
 
                 # Vector times matrix
-                if len(self.shape) == 1:
+                if self.is_vec_like():
                     assert(other.invar)
                     assert(other.defval == 0)
                     assert(other.is_mat_like())
@@ -1404,7 +1449,7 @@ class SU2kMPS:
                             continue
 
                 # Matrix times vector
-                elif len(other.shape) == 1:
+                elif other.is_vec_like():
                     assert(self.invar)
                     assert(self.defval == 0)
                     assert(self.is_mat_like())
@@ -1504,6 +1549,41 @@ class SU2kMPS:
             res += np.trace(cur_mat)
         return res
 
+    def matrix_qtrace(self):
+        """Takes the qtrace of a matrix-like SU2kMPS.  Returns a number
+
+        """
+        assert(self.is_mat_like())
+        res = 0
+        # go throught the sectors
+        for k,v in self.sects.items():
+            sh = v.shape[0]
+            cur_mat = v.reshape((sh,sh))
+            res += np.trace(cur_mat) * SU2k_data.qdim(self.hmax,k[0]) 
+        return res
+
+    def vec_qtrace(self):
+        """Takes the qtrace of a vec-like SU2kMPS which represents a diag matrix.
+       
+        """
+        assert(self.is_vec_like())
+        res = 0
+        # go throught the sectors
+        for k,v in self.sects.items():
+            res += np.sum(v) * SU2k_data.qdim(self.hmax,k[0]) 
+        return res
+
+    def vec_EEnt(self):
+        """computes entanglement entropy of vec-like SU2kMPS which represents a diag matrix.
+       
+        """
+        assert(self.is_vec_like())
+        res = 0
+        # go throught the sectors
+        for k,v in self.sects.items():
+            res += np.sum((v**2) * np.log(v**2)) * SU2k_data.qdim(self.hmax,k[0]) 
+        return -res
+    
     ##
     def contract(self, other, erase_id=True):
         """Contracts the last index of self with the first of other.
@@ -1518,8 +1598,7 @@ class SU2kMPS:
         if erase_id, then when either a or b are = 1, h1,a or b,h2 
         are removed, so that the result has 3 indices only.
 
-        TODO: CHECK AND GENERALIZE
-
+      
         """
         # more assertion to be added...  assert(self.is_wf() and
         # other.is_wf()) does not work since we want to use it with
@@ -1697,8 +1776,9 @@ class SU2kMPS:
 
         eigdecomps = {}
         dims = {}
-        minusabs_next_eigs = [] # heap - binary tree with smallest element at node
-        all_eigs = [] 
+        minusabs_next_eigs_sqrt_qdim = [] # minheap
+        s_sqrt_qdim_sects = {}
+        all_eigs_sqrt_qdim = [] 
         for k,v in self.sects.items():
             # here v has shape (n,1,n) so remove the central axis:
             vshape = v.shape
@@ -1719,24 +1799,28 @@ class SU2kMPS:
             eigdecomp = (s, u)
             eigdecomps[k] = eigdecomp 
             dims[k] = 0 
-            all_eigs.append(s)
-            if 0 not in s.shape:
+            # multiply by sqrt(quantum dimension) since norm, which we
+            # want to maximise, involves it
+            eigs_sqrt_qdim = s * np.sqrt(SU2k_data.qdim(self.hmax, k[0]))
+            s_sqrt_qdim_sects[k] = eigs_sqrt_qdim
+            all_eigs_sqrt_qdim.append(eigs_sqrt_qdim)
+            if 0 not in eigs_sqrt_qdim.shape:
                 # push to the heap, whose root has - the absolute the
                 # biggest sing value, and the descending nodes contain
-                # - biggest sing value for key k
-                heapq.heappush(minusabs_next_eigs, (-np.abs(s[0]), k))
-
+                # - biggest eigvalue for key k
+                heapq.heappush(minusabs_next_eigs_sqrt_qdim,
+                               (-np.abs(eigs_sqrt_qdim[0]), k))
         try:
             # concatenate the list of ndarrays to a single ndarray
-            all_eigs = np.concatenate(all_eigs)
+            all_eigs_sqrt_qdim = np.concatenate(all_eigs_sqrt_qdim)
         except ValueError:
             # all_eigs == []
-            all_eigs = np.array((0,))
+            all_eigs_sqrt_qdim = np.array((0,))
 
-        
         # Truncate, if truncation dimensions are given.
         chi, dims, rel_err = type(self).find_trunc_dim(
-            all_eigs, eigdecomps, minusabs_next_eigs, dims,
+            all_eigs_sqrt_qdim, s_sqrt_qdim_sects,
+            minusabs_next_eigs_sqrt_qdim, dims,
             chis=chis, eps=eps, break_degenerate=break_degenerate,
             degeneracy_eps=degeneracy_eps, norm_type=norm_type)
 
@@ -1779,7 +1863,6 @@ class SU2kMPS:
             U[k_U] = np.expand_dims(v[1], axis=1)
 
         return S, U, rel_err
-
 
     ##
     def matrix_svd(self, chis=None, eps=0, print_errors=0,
@@ -1838,10 +1921,11 @@ class SU2kMPS:
         # dims=dict containing the dimensions of each sector, init to 0 and
         # modified by the function find_trunc_dim
         dims = {} 
+        s_sqrt_qdim_sects = {} # contains s by sectors
         # going to be heapq containing (-biggest_sing_value, key) for each key
-        minus_next_sings = [] 
+        minus_next_sings_sqrt_qdim = [] 
         # list contains all singular values
-        all_sings = []
+        all_sings_sqrt_qdim = []
         for k,vv in self.sects.items():
             # here v has shape (n,1,m) so remove the central axis:
             vshape = vv.shape
@@ -1859,23 +1943,26 @@ class SU2kMPS:
             svd = (s, u, v) # note order
             svds[k] = svd
             dims[k] = 0
-            sings = svd[0]
-            all_sings.append(sings)
-            if 0 not in sings.shape:
+            # multiply by sqrt(quantum dimension) since norm, which we
+            # want to maximise, involves it
+            sings_sqrt_qdim = svd[0]*np.sqrt(SU2k_data.qdim(self.hmax, k[0]))
+            s_sqrt_qdim_sects[k] = sings_sqrt_qdim
+            all_sings_sqrt_qdim.append(sings_sqrt_qdim)
+            if 0 not in sings_sqrt_qdim.shape:
                 # push to the heap, whose root has - the absolute the
                 # biggest sing value, and the descending nodes contain
                 # - biggest sing value for key k
-                heapq.heappush(minus_next_sings, (-sings[0], k))
+                heapq.heappush(minus_next_sings_sqrt_qdim, (-sings_sqrt_qdim[0], k))
         try:
             # flattens to a vector
-            all_sings = np.concatenate(all_sings)
+            all_sings_sqrt_qdim = np.concatenate(all_sings_sqrt_qdim)
         except ValueError:
             # all_sings == []
-            all_sings = np.array((0,))
+            all_sings_sqrt_qdim = np.array((0,))
         
         # Truncate, if truncation dimensions are given.
         chi, dims, rel_err = type(self).find_trunc_dim(
-            all_sings, svds, minus_next_sings, dims,
+            all_sings_sqrt_qdim, s_sqrt_qdim_sects, minus_next_sings_sqrt_qdim, dims,
             chis=chis, eps=eps, break_degenerate=break_degenerate,
             degeneracy_eps=degeneracy_eps, norm_type=norm_type,
             remove_small=remove_small)
@@ -1891,20 +1978,20 @@ class SU2kMPS:
         new_dim = []
         new_height = []
         svds = {k:v for k,v in svds.items() if dims[k] > 0}
-        sum_S_sq = 0 # sum of S_i^2 over all i kept
+        sum_S_sq_qdim = 0 # sum of S_{i,a}^2 d_a over all i,a kept
         for k,v in svds.items():
             d = dims[k]
             if d>0:
                 new_dim.append(d)
                 new_height.append(k[0])
                 new_S = v[0][:d]
-                sum_S_sq += sum(new_S**2)
+                sum_S_sq_qdim += sum(new_S**2)*SU2k_data.qdim(self.hmax, k[0])
                 svds[k] = (new_S, v[1][:,:d], v[2][:d,:])
             else:
                 del(svds[k])
 
         if print_errors > 0:
-            print("sum_S_sq",sum_S_sq)
+            print("sum_S_sq_qdim",sum_S_sq_qdim)
 
         # Initialize U, S, V.
         sh = [self.shape[0], self.shape[1], new_dim]
@@ -1930,7 +2017,7 @@ class SU2kMPS:
             k_U = (k[0], 1, k[0]) 
             if norm_S: 
                 # normalize so that norm of S = 1 (assume frobenius norm)
-                S[(k[0],)] = v[0]/np.sqrt(sum_S_sq)
+                S[(k[0],)] = v[0]/np.sqrt(sum_S_sq_qdim)
             else:
                 S[(k[0],)] = v[0]
             # reshape by introducing the extra dim at 1
@@ -1940,77 +2027,13 @@ class SU2kMPS:
         if norm_S:
             return U, S, V, rel_err
         else:
-            return U, S, V, rel_err, np.sqrt(sum_S_sq)
-
-#     def act_TL_gen(self):
-#         """Act with the Temperley Lieb generator on a SU2kMPS with shape =
-#         [[n1,...],[1],[1,...],[1],[n3,...]]  heights =
-#         [[h1,...],[2],[h2,...],[2],[h3,...]]  to produce another
-#         SU2kMPS with of the same type with sects containing the result
-#         of the action of e_2
-
-#         """
-#         # checks:
-#         assert(self.is_2_sites)
-#         first_ind = 0
-#         last_ind = 4
-
-#         res_sects = {}
-#         set_h2p = set() # set so that only unique values are retained
-#         list_keys = list(self.sects.keys())
-#         used_h1=set()
-#         [used_h1.add(key[first_ind]) for key in list_keys]
-#         used_h1 = sorted(list(used_h1))
-#         for h1 in used_h1:
-#             if h1 not in self.heights[last_ind]:
-#                 # set only the non-zero sects, namely those for which h1=h3.
-#                 # the others are automatically to defval
-#                 continue
-#             else:
-#                 # get all possible h2' produced by the sum in the action of e_2
-#                 shp1 = self.shape[first_ind][self.heights[first_ind].index(h1)]
-#                 shp2 = self.shape[last_ind][self.heights[last_ind].index(h1)]
-#                 range_h1_times_2 = SU2k_data.fusion_range(self.hmax, h1, 2)
-#                 for h2p in range_h1_times_2:
-#                     set_h2p.add(h2p)
-#                     new_key = (h1,2,h2p,2,h1)
-#                     # new_block=sum_{h2} sects[h1,2,h2,h1] *
-#                     # weight(h2p,h2,h1) note: we do not assume that
-#                     # new_key is already among the old keys so instead
-#                     # of defblock we build it from scratch
-#                     new_block = np.zeros((shp1,1,1,1,shp2))
-#                     for h2 in range_h1_times_2:
-#                         old_key = (h1,2,h2,2,h1)
-#                         if old_key in self.sects.keys():
-#                             tmp = self.sects[old_key]* \
-#                                   SU2k_data.TL_weight(self.hmax, h1, h2, h2p)
-#                             new_block += tmp
-#                         # else continue
-#                     res_sects[new_key] = new_block
-                        
-#         h2p = sorted(list(set_h2p))
-#         new_dim_2 = [1] * len(h2p)
-#         res_shape = self.shape[:first_ind+2]+[new_dim_2]+self.shape[last_ind-1:]
-#         res_heights = self.heights[:first_ind+2]+[h2p]+self.heights[last_ind-1:]
-
-# #        print("In SU2kMPS.act_TL_gen: shape", self.shape, " res.shape", res_shape)
-# #        print("heights", self.heights, " res.heights", res_heights)
-        
-#         # Set the new SU2kMPS and return:
-#         res_shape, res_heights = self.sorted_shape_heights(shape=res_shape, 
-#                                                            heights=res_heights)
-#         res = type(self)(res_shape, heights=res_heights,
-#                          hmax=self.hmax, sects=res_sects,
-#                          dtype=self.dtype, charge=self.charge,
-#                          defval=self.defval, invar=self.invar)
-
-#         return res
+            return U, S, V, rel_err, np.sqrt(sum_S_sq_qdim)
 
     ##
     def svd_2_sites(self, chis=None, eps=0, print_errors=0,
                    break_degenerate=False, degeneracy_eps=1e-6,
                    norm_type="frobenius", norm_S=True):
-        """Compute the svd of 2 sites MPS by first fusing the left and
+        """Compute the svd of 2 sites MPS by first fusing the left and right
         indices, then flattening to a matrix-like MPS and the calling
         the matrix_svd method.
 

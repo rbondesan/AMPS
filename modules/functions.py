@@ -14,47 +14,8 @@ from modules import SU2kMPS_file, SU2k_data
 # init #
 ########
 
-def init_itebd(pars):
-    """init itebd either from file or by computing 2 anyons problem
-
-    """
-    # Open file previous trunc_D and previous eps and dt
-    min_D = 4
-    my_pars = pars.copy()
-    trunc_D = pars['chi']
-    for cur_D in range(trunc_D, min_D - 1, -1):
-        eps = pars['eps']
-        while eps < 1e-04:
-            dt = pars['dt']
-            while dt < 0.1:
-                file_name = 'init/SU2k_itebd_'
-                file_name += 'hmax_'+str(pars['hmax'])+'_'
-                file_name += 'chi_'+str(cur_D)+'_'
-                file_name += 'dt_'+str(dt)+'_'
-                file_name += 'eps_'+'{:.0e}'.format(eps)
-                try:
-                    # Use numpy routines
-                    with open(file_name, 'rb') as f:                    
-                        A = pickle.load(f)
-                        Lambda = pickle.load(f)
-                        B = pickle.load(f)
-                        Lambda_old = pickle.load(f)
-                        print('init_itebd: from file', file_name)
-                        return A, Lambda, B, Lambda_old
-                except IOError:
-                    pass
-                dt *= 10
-            eps *= 10
-
-    # If here it means that no file has been found, and curD = min_D
-    # so init_itebd_4 is called
-    print('init_itebd: from 2 anyons')
-    A, Lambda, B, Lambda_old = init_itebd_4(pars['hmax'])
-
-    return A, Lambda, B, Lambda_old
-
 def init_itebd_mod(pars):
-    """init itebd either from file or by computing 2 anyons problem
+    """init itebd either from file or by computing 4 anyons problem
 
     """
     # Open file previous trunc_D and previous eps and dt
@@ -62,40 +23,43 @@ def init_itebd_mod(pars):
     min_D = 4
     my_pars = pars.copy()
     trunc_D = pars['chi']
-    for cur_D in range(trunc_D, min_D - 1, -1):
-        eps = pars['eps']
-        while eps < 1e-04:
-            dt = pars['dt']
-            # TODO: Use the function read_from_file_mod
-            while dt < 0.1:
-                file_name = 'init/SU2k_itebd_'
-                file_name += 'hmax_'+str(pars['hmax'])+'_'
-                file_name += 'a_'+str(pars['height0'])+'_'
-                file_name += 'b_'+str(pars['heightL'])+'_'
-                file_name += 'chi_'+str(cur_D)+'_'
-                file_name += 'dt_'+str(dt)+'_'
-                file_name += 'eps_'+'{:.0e}'.format(eps)
-                try:
-                    with open(file_name, 'rb') as f:                    
-                        AA = pickle.load(f)
-                        lA = pickle.load(f)
-                        AB = pickle.load(f)
-                        lB = pickle.load(f)
-                        A1 = pickle.load(f)
-                        A2 = pickle.load(f)
-                        Lt = pickle.load(f)
-                        B1 = pickle.load(f)
-                        B2 = pickle.load(f)
-                        print('init_itebd: from file', file_name)
-                        return lA,lB,AA,AB
-                except IOError:
-                    pass
-                dt *= 10
-            eps *= 10
+    start_four = False
+    if start_four is False:
+        for cur_D in range(trunc_D, min_D - 1, -1):
+            eps = pars['eps']
+            while eps < 1e-04:
+                dt = pars['dt']
+                # TODO: Use the function read_from_file_mod
+                while dt <= 0.1:
+                    file_name = 'init/SU2k_itebd_'
+                    file_name += 'hmax_'+str(pars['hmax'])+'_'
+                    file_name += 'a_'+str(pars['height0'])+'_'
+                    file_name += 'b_'+str(pars['heightL'])+'_'
+                    file_name += 'chi_'+str(cur_D)+'_'
+                    file_name += 'dt_'+'{:.0e}'.format(dt)+'_'
+                    file_name += 'eps_'+'{:.0e}'.format(eps)
+                    try:
+                        with open(file_name, 'rb') as f:                    
+                            AA = pickle.load(f)
+                            lA = pickle.load(f)
+                            AB = pickle.load(f)
+                            lB = pickle.load(f)
+                            A1 = pickle.load(f)
+                            A2 = pickle.load(f)
+                            Lt = pickle.load(f)
+                            B1 = pickle.load(f)
+                            B2 = pickle.load(f)
+                            print('init_itebd: from file', file_name)
+                            return lA,lB,AA,AB
+                    except IOError:
+                    #print('could not load',file_name)
+                        pass
+                    dt *= 10
+                eps *= 10
 
     # If here it means that no file has been found, and curD = min_D
     # so init_itebd_4 is called
-    print('init_itebd: from 2 anyons')
+    print('init_itebd: from 4 anyons')
     A, Lambda, B, Lambda_old = init_itebd_4(pars['hmax'],\
                                             pars['height0'],pars['heightL'])
     lA,lB,AA,AB = orig_to_mod(A,Lambda,B,Lambda_old)
@@ -127,13 +91,15 @@ def init_itebd_4(hmax,a,b):
     We consider only even number of anyons -> parity a=parity b.
 
     """
+    # if False, init from random state
+    isExact2Sites = True
+ 
     if a < 1 or a > hmax or b < 1 or b > hmax:
         print("In init_itebd_4: not valied bc",a,b)
         sys.exit(1)
     if a!=b:
         print("this is an excited state...")
-        sys.exist(1)
-    
+        sys.exit(1)
     # init to the ground state of 2 anyons system:
     if a == 1:
         init_shape = [[1],[1],[1],[1],[1]]
@@ -144,15 +110,21 @@ def init_itebd_4(hmax,a,b):
         init_shape = [[1],[1],[1],[1],[1]]
         init_heights = [[a],[2],[a-1],[2],[a]]
         init_sects = {}
-        init_sects[a,2,a-1,2,a] = np.array([1],dtype=float).reshape(1,1,1,1,1)
+        init_sects[a,2,a-1,2,a] = np.array([1/np.sqrt(SU2k_data.qdim(hmax,hmax))],
+                                           dtype=float).reshape(1,1,1,1,1)
     else: 
-        # eigenvector of matrix [[x,sqrt(x y)],[sqrt(x y),y]] with
-        # x=-SU2k_data.qpsi(hmax,a-1)/SU2k_data.qpsi(hmax,a)
-        # y=-SU2k_data.qpsi(hmax,a+1)/SU2k_data.qpsi(hmax,a)
-        # so its coefficients are:
-        Cam1 = -np.sqrt(SU2k_data.qpsi(hmax,a-1))
-        Cap1 = np.sqrt(SU2k_data.qpsi(hmax,a+1)) 
-        norm = np.sqrt(Cam1**2 + Cap1**2)
+        if isExact2Sites:
+            # eigenvector of matrix [[x,sqrt(x y)],[sqrt(x y),y]] with
+            # x=-SU2k_data.qpsi(hmax,a-1)/SU2k_data.qpsi(hmax,a)
+            # y=-SU2k_data.qpsi(hmax,a+1)/SU2k_data.qpsi(hmax,a)
+            # so its coefficients are:
+            Cam1 = -np.sqrt(SU2k_data.qpsi(hmax,a-1))
+            Cap1 = np.sqrt(SU2k_data.qpsi(hmax,a+1)) 
+        else:
+            # random
+            Cam1 = np.random.randn()
+            Cap1 = np.random.randn()
+        norm = np.sqrt((Cam1**2 + Cap1**2) * SU2k_data.qdim(hmax,a))
         Cam1 = Cam1/norm
         Cap1 = Cap1/norm
         init_shape = [[1],[1],[1,1],[1],[1]]
@@ -163,14 +135,15 @@ def init_itebd_4(hmax,a,b):
 
     init = SU2kMPS_file.SU2kMPS(shape=init_shape, heights=init_heights,
                                 sects=init_sects, hmax=hmax, dtype=float)
+    print(" [*] init state",init)
+    
     A,L,B,rel_err = init.svd_2_sites()
     # Lambda_old
     L_old = SU2kMPS_file.SU2kMPS([[1]], heights=[[a]], hmax=hmax,
                                       invar=False, dtype=float)
-    L_old[(a,)] = np.array([1])
+    L_old[(a,)] = np.array([1 / np.sqrt(SU2k_data.qdim(hmax,a))])
     
     return A,L,B,L_old
-
     
 #############
 # Operators #
@@ -268,13 +241,13 @@ def act_R(psi,i=1):
     return psi1-psi2
 
 def act_R1(psi,i=1):
-    """Act with 1/2([e_i,e_{i+1}] + [e_{i+1},e_{i+2}]) on wf
+    """Act with [e_i,e_{i+1}] + [e_{i+1},e_{i+2}] on wf
 
     """
     assert(psi.is_wf())
     psi1 = act_R(psi, i=i)
     psi2 = act_R(psi, i=i+1)
-    return 1/2.*(psi1+psi2)
+    return psi1+psi2
 
 def act_F1(psi,i=1):
     """Act with [e_i,e_{i+1}] - [e_{i+1},e_{i+2}] on wf
@@ -290,7 +263,7 @@ def act_TL_gen(psi, i=1):
     [[n1,...],[1],[1,...],[1],[n3,...]]  heights =
     [[h1,...],[2],[h2,...],[2],[h3,...]]  to produce another
     SU2kMPS with of the same type with sects containing the result
-    of the action of e_2
+    of the action of e_i
 
     i = index of TL, default i=1:
 
@@ -374,40 +347,6 @@ def act_U_bond(beta, dt, psi):
 # recursion #
 #############
 
-def recursion(A,Lambda,B,Lambda_old,max_it,pars,save):
-    """Run the recursion. If the naive entropy has converged, run until
-    the true entropy has converged.  This avoids computing the mixed
-    representation which is costly in the first few iterations.
-
-    max_it is maximum number of iterations. Return the converged
-    A,Lambda,B,Lambda_old
-
-    """
-    print('Recursion starts...')
-
-
-    ##DEBUG
-    lA,lB,AA,AB = orig_to_mod(A,Lambda,B,Lambda_old)
-    At,Lt,Bt,Loldt=mod_to_orig(lA,lB,AA,AB)
-    print("A-At", A-At)
-    print("B-Bt", B-Bt)
-    print("L-Lt", Lambda-Lt)
-    print("Lold-Loldt", Lambda_old-Loldt)
-
-    
-    beta = SU2k_data.qdim(pars['hmax'],2)
-    eps = pars['eps']
-    delta_t = pars['dt']
-    trunc_D = pars['chi']
-    EEnt_naive_prev = 0
-    EEnt_naive_conv = False
-    for n in range(max_it):
-        # print("***************************")
-        print("Iteration num ", n)
-        A,Lambda,B,Lambda_old=update_matrices(A, Lambda, B, Lambda_old,
-                                              beta, delta_t, trunc_D)
-                
-    return A,Lambda,B,Lambda_old
 
 def recursion_mod(lA,lB,AA,AB,max_it,pars,save):
     """Run the recursion, modified algorithm (Hasting j math phys
@@ -419,26 +358,127 @@ def recursion_mod(lA,lB,AA,AB,max_it,pars,save):
     lA,lB,AA,AB
 
     """
-    print('Recursion modified starts...')
+    print(' [*] Recursion modified starts...')
     beta = SU2k_data.qdim(pars['hmax'],2)
     eps = pars['eps']
     delta_t = pars['dt']
     trunc_D = pars['chi']
-    conv = False
+    EEnt_prev = 0
+    EEnt_naive_prev = 0
     A1=0;A2=0;Lt=0;B1=0;B2=0
-    for n in range(max_it):
-        lA,lB,AA,AB=update_matrices_mod(lA,lB,AA,AB,
-                                        beta, delta_t, trunc_D)
 
+    # set some parameters. TODO: put in a config file
+    n_check_max = 100000
+    n_check_short = 1000
+    n_check = n_check_short * 10000 # TMP to prevent check # number of iterations after which compute entropy
+    offset = 6 # how many steps to wait before checking entropy
+    # empirically: decay rate N/8 so that it is maximum delta_t*10^{-4}
+    decay_rate = 8.
+    is_decay = False # if decay rate or fixed
+    is_converged = False # if entropy has converged
+    n_converged = 0 # number of consequent steps after first time
+    # converged number of steps after which early stop if already converged
+    n_steps_early_stop = 50
+    mult_eps = 2 # multiplier of epsilon used when resizing n_check
+    n_dump = 10000 # number of iterations after which dump to file
+
+    # now start the recursion
+    n = 0 # number of applications of half of a transfer matrix (even n AB, odd n, BA)
+    while n < max_it:
+        # dump to file 
+        if n % n_dump == 0 and n >= offset:
+            print('INFO: n=',n) #TMP
+            save_to_file_mod(lA,lB,AA,AB,A1,A2,Lt,B1,B2,pars)
+
+        # check entropy and save to file every n_check iterations:
+        if n % n_check == 0 and n >= offset:
+            if n_check > 1:
+                # EEnt_prev is old, recompute it
+                A1,A2,Lt,B1,B2=mixed_canonical_form_mod(lA,lB,AA,AB,check=False)
+                EEnt_prev = get_EEent_mixed_repr(Lt)
+            # update matrices
+            lA,lB,AA,AB=update_matrices_mod(lA,lB,AA,AB,
+                                            beta, 
+                                            decay_dt(delta_t,n,max_it/decay_rate,is_decay), 
+                                            trunc_D)
+            lA,lB,AA,AB=update_matrices_mod(lA,lB,AA,AB,
+                                            beta, 
+                                            decay_dt(delta_t,n,max_it/decay_rate,is_decay), 
+                                            trunc_D)
+            # update n
+            n += 2
+            A1,A2,Lt,B1,B2=mixed_canonical_form_mod(lA,lB,AA,AB,check=False) 
+            EEnt = get_EEent_mixed_repr(Lt)
+            DeltaEEnt = EEnt - EEnt_prev
+            print("INFO: (n,EEnt,DeltaEEnt,1-F) = {} {} {} {}"\
+                  .format(n, EEnt, DeltaEEnt,1-fidelity_mod(lB,AA)))
+            if np.abs(DeltaEEnt) < eps:
+#                print("EEnt converged at n =",n," EEnt =", EEnt, "eps=",eps)
+                if is_converged == False:
+                    # first time converged
+                    is_converged = True
+                    n_converged = 1
+                    # update n_check to 1, so that keep checking each iteration
+                    n_check = 1
+                if n_converged == n_steps_early_stop:
+                    print(' [*] Early stop since already converged on {} steps'.format(n_steps_early_stop))
+                    break
+                else:
+                    n_converged += 1
+                    continue
+            # here not converged:
+            # adjust n_check since checking is expensive
+            if np.abs(DeltaEEnt) > eps*mult_eps:
+                n_check = min(n_check_max,n_check*2)
+            else:
+                n_check = n_check_short
+            # if here true means that it was converged and now again oscillating
+            if is_converged:
+                is_converged = False
+            # reassign
+            EEnt_prev = EEnt
+        else:
+            # just update matrices
+            lA,lB,AA,AB=update_matrices_mod(lA,lB,AA,AB,beta, 
+                                            decay_dt(delta_t,n,max_it/decay_rate,is_decay),trunc_D)
+            n += 1
+            # # TEMP:
+            # if n % 2 == 0:
+            #     EEnt_naive = my_EEnt(lA)
+            #     DEEnt_naive = EEnt_naive - EEnt_naive_prev
+            #     print('TEMP: n = {}, EEnt naive = {}, heights = {}, dims = {}'\
+            #           .format(n,abs(EEnt_naive),lA.heights,lA.shape))
+            #     if abs(DEEnt_naive) < eps:
+            #         print('converged EEnt naive = ', EEnt_naive)
+            #         break
+            #     else:
+            #         EEnt_naive_prev = EEnt_naive
+            
     if max_it == 0 or max_it == 1 or max_it == 2:
         return lA,lB,AA,AB,A1,A2,Lt,B1,B2
     else:
-        print("Recusion ended.")
+        print(" [*] Recusion ended.")
+        if n >= max_it - 1:
+            print("Reached max_it and not converged EEnt")
+        print('TEMP: EEnt naive',  my_EEnt(lA))
+#        print('TEMP: norm naive',  my_norm(lB.diag().contract(AA).contract(AB)))
+#        print('TEMP: Energy naive',  my_energy(lB.diag().contract(AA).contract(AB)))
+        print('INFO: lA heights,shape = {}, {}, lB heights,shape = {}, {}'\
+              .format(lA.heights,lA.shape,lB.heights,lB.shape))
         one_minus_F = 1-fidelity_mod(lB,AA)
         print("1-F=",one_minus_F)
         A1,A2,Lt,B1,B2=mixed_canonical_form_mod(lA,lB,AA,AB,check=True)
         EEnt = get_EEent_mixed_repr(Lt)
-        print("EEnt =", EEnt)        
+        # corr length
+        E_L = transfer_operator(A1,A2)
+        n_corr_lens = 5
+        cur_corr_lens = compute_corr_lengths(E_L,n_corr_lens)
+        cur_corr_lens = np.real(cur_corr_lens[0:-1]) #up to the last which is infty.
+        cur_xi = max(cur_corr_lens) 
+#        print("INFO: log corr lens ", np.log(cur_corr_lens))
+        print("INFO: cur_xi ", cur_xi)
+        print("INFO: log(xi) vs EEnt ", np.log(cur_xi), EEnt)
+        # energy
         En_0 = one_point_function(A1,A2,Lt,n_heights=3,parity=0,
                                   act_Op=act_TL_gen)
         En_1 = one_point_function(A1,A2,Lt,n_heights=3,parity=1,
@@ -447,18 +487,14 @@ def recursion_mod(lA,lB,AA,AB,max_it,pars,save):
         
         return lA,lB,AA,AB,A1,A2,Lt,B1,B2
 
-def update_matrices(A, Lambda, B, Lambda_old, beta, delta_t, trunc_D):
-    """The main part of recursion
+def decay_dt(dt0,n,l,is_decay):
+    """Exponential decay of delta_t, ranges from dt0 to dt0*e^{-N/l}
 
     """
-    psi_guess = compute_psi(A, Lambda, B, Lambda_old)
-    psi = act_U_bond(beta, delta_t, psi_guess)
-    Lambda_old = Lambda
-    A, Lambda, B, rel_err = psi.svd_2_sites(chis=trunc_D,
-                                            print_errors=0,
-                                            break_degenerate=False)
-
-    return A,Lambda,B,Lambda_old
+    if is_decay:
+        return dt0*np.exp(-n/l)
+    else:
+        return dt0
 
 def update_matrices_mod(lA,lB,AA,AB, beta, delta_t, trunc_D):
     """The main part of recursion
@@ -472,9 +508,12 @@ def update_matrices_mod(lA,lB,AA,AB, beta, delta_t, trunc_D):
     tmp=lA.diag().contract(AB)
     psi = tmp.contract(AA)
     
+#    print("psi",psi)
     theta = act_U_bond(beta, delta_t, psi)
+#    print("theta",theta,theta.check_consistency())
     fused_l = theta.fuse(inds=(0,1),erase_inds=True)
     theta = fused_l.fuse(inds=(2,1))
+#    print("theta2",theta,theta.check_consistency())
 
     U, S, V, rel_err, sqrt_sum_S = theta.matrix_svd(chis=trunc_D,
                                         print_errors=0,
@@ -484,6 +523,9 @@ def update_matrices_mod(lA,lB,AA,AB, beta, delta_t, trunc_D):
     hs = psi.heights
     AB = V.split(inds=(2,1), new_dim_i = sh[4], new_dim_j = sh[3],
                 new_h_i = hs[4], new_h_j = hs[3])
+    # 2 lines to be removed:
+    #Vdag = V.transpose(p=(2,1,0)).conj()
+    #AA_tmp = C.matrix_dot(Vdag)
     AA_tmp = C.matrix_dot(V.conj(),transpose_other=True)
     AA = AA_tmp.split(inds=(0,1), new_dim_i = sh[0], new_dim_j = sh[1],
                       new_h_i = hs[0], new_h_j = hs[1])
@@ -493,6 +535,31 @@ def update_matrices_mod(lA,lB,AA,AB, beta, delta_t, trunc_D):
     # function is normalized)
     lA /= sqrt_sum_S
     AA /= sqrt_sum_S
+
+    # in principle at this point we should normalize the wave function.
+    # this requires to compute gauge factors X and Y, which is costly. Instead
+    # do it only when compute entanglement
+
+    # # ###### CHECKS
+    # lA_mat = lA.diag()
+    # lB_mat = lB.diag()
+    # print("Norm lA,lB ", lA_mat.matrix_dot(lA_mat).matrix_qtrace(),lB_mat.matrix_dot(lB_mat).matrix_qtrace())    
+    # pl=lB_mat.contract(AA)
+    # pr=AB
+    # pp=pl.contract(pr)
+    # print("In update_matrices_mod: my_norm1",my_norm(pp))
+    # #
+    # # pl=lB_mat.contract(AA)
+    # # pr=AB.contract(lB_mat.matrix_inv())
+    # # pp=pl.contract(pr)
+    # # print("In update_matrices_mod: my_norm2",my_norm(pp))
+
+    # A = U.split(inds=(0,1), new_dim_i = sh[0], new_dim_j = sh[1],
+    #             new_h_i = hs[0], new_h_j = hs[1])
+    # pl=A.contract(lA.diag())
+    # pr=AB
+    # pp=pl.contract(pr)
+    # print("In update_matrices_mod: my_norm3",my_norm(pp))
     
     return lA,lB,AA,AB
 
@@ -505,43 +572,6 @@ def compute_psi_mod(A,B):
     assert(A.shape[1] == [1] and B.shape[1] == [1])
     return B.contract(A)
 
-def compute_psi(A, L, B, Lold):
-    """Returns the wave function for 2 sites given
-    the SU2kMPs A,B,L,L_old by contracting:
-    psi = L . B . Lold^{-1} . A . L
-    
-    """
-    assert(len(A.shape) == 3 and len(B.shape) == 3)
-    assert(A.shape[1] == [1] and B.shape[1] == [1])
-    L_mat = L.diag()
-    Lold_mat_inv = Lold.diag().matrix_inv()
-    # erase_id = True by default, ret is same shape and heights as B in first 2 steps
-    tmp_l = L_mat.contract(B) 
-    tmp_l = tmp_l.contract(Lold_mat_inv) 
-    tmp_r = A.contract(L_mat)
-    return tmp_l.contract(tmp_r)
-
-def save_to_file(A, Lambda, B, Lambda_old, pars):
-    """Dump to file the matrices using pickle
-
-    """
-    # Save data A, Lambda, B, Lambda_old to start next D recurrence
-    # from it or for computing entropy, correlators etc
-    file_name = 'init/SU2k_itebd_'
-    file_name += 'hmax_'+str(pars['hmax'])+'_'
-    file_name += 'a_'+str(pars['height0'])+'_'
-    file_name += 'b_'+str(pars['heightL'])+'_'
-    file_name += 'chi_'+str(pars['chi'])+'_'
-    file_name += 'dt_'+str(pars['dt'])+'_'
-    file_name += 'eps_'+str(pars['eps'])
-    # Use numpy routines
-    with open(file_name, 'wb') as f:
-        pickle.dump(A, f)
-        pickle.dump(Lambda, f)
-        pickle.dump(B, f)
-        pickle.dump(Lambda_old, f)
-    print('save_to_file: saved to ', file_name)
-
 def save_to_file_mod(lA,lB,AA,AB,A1,A2,Lt,B1,B2,pars):
     """Dump to file the matrices using pickle
 
@@ -553,8 +583,8 @@ def save_to_file_mod(lA,lB,AA,AB,A1,A2,Lt,B1,B2,pars):
     file_name += 'a_'+str(pars['height0'])+'_'
     file_name += 'b_'+str(pars['heightL'])+'_'
     file_name += 'chi_'+str(pars['chi'])+'_'
-    file_name += 'dt_'+str(pars['dt'])+'_'
-    file_name += 'eps_'+str(pars['eps'])
+    file_name += 'dt_'+'{:.0e}'.format(pars['dt'])+'_'
+    file_name += 'eps_'+'{:.0e}'.format(pars['eps'])
     # Use numpy routines
     with open(file_name, 'wb') as f:
         pickle.dump(AA, f)
@@ -567,7 +597,7 @@ def save_to_file_mod(lA,lB,AA,AB,A1,A2,Lt,B1,B2,pars):
         pickle.dump(B1, f)
         pickle.dump(B2, f)
 
-    print('save_to_file_mod: saved to ', file_name)
+    print(' [*] In save_to_file_mod: saved to ', file_name)
 
 def read_from_file_mod(pars):
     """Read from file the matrices using pickle
@@ -578,7 +608,7 @@ def read_from_file_mod(pars):
     file_name += 'a_'+str(pars['height0'])+'_'
     file_name += 'b_'+str(pars['heightL'])+'_'
     file_name += 'chi_'+str(pars['chi'])+'_'
-    file_name += 'dt_'+str(pars['dt'])+'_'
+    file_name += 'dt_'+'{:.0e}'.format(pars['dt'])+'_'
     file_name += 'eps_'+'{:.0e}'.format(pars['eps'])
     try:
         # Uses the modified itebd matrices
@@ -610,8 +640,12 @@ def my_energy(psi):
     ret = 0
     for k,v in psi.sects.items():
         vp = psip[k]
-        ret += np.tensordot(np.conj(v),vp,axes=([0,4],[0,4])).reshape(1)[0]
+        da = SU2k_data.qdim(psi.hmax,k[0])
+        ret += np.tensordot(np.conj(v),vp,axes=([0,4],[0,4])).reshape(1)[0] * da
     return ret
+
+def my_EEnt(L):
+    return L.vec_EEnt()
 
 def my_ord_par(psi,m):
     assert(psi.is_2_sites)
@@ -620,7 +654,8 @@ def my_ord_par(psi,m):
     ret = 0
     for k,v in psi.sects.items():
         vp = psip[k]
-        ret += np.tensordot(np.conj(v),vp,axes=([0,4],[0,4])).reshape(1)[0]
+        da = SU2k_data.qdim(psi.hmax,k[0])
+        ret += np.tensordot(np.conj(v),vp,axes=([0,4],[0,4])).reshape(1)[0] * da
     return ret
 
 def my_norm(psi):
@@ -628,8 +663,9 @@ def my_norm(psi):
     # compute overlap: run over the keys of psi since heights of psi are a subset of the heights of psip
     ret = 0
     for k,v in psi.sects.items():
-        ret += np.tensordot(np.conj(v),v,axes=([0,4],[0,4])).reshape(1)[0]
-    return ret
+        da = SU2k_data.qdim(psi.hmax,k[0])
+        ret += np.tensordot(np.conj(v),v,axes=([0,4],[0,4])).reshape(1)[0] * da
+    return np.sqrt(ret)
 
 ##################################################
 # Transfer operators and their orthogonalization #
@@ -643,8 +679,8 @@ def get_E_sects(psi, psip):
 
     """
     L = len(psi.shape)
+    assert(L == len(psip.shape))
     Lm1 = len(psi.shape)-1
-    assert(Lm1 == len(psip.shape)-1)
     assert(psi.compatible_indices(psi, 0, Lm1))
     assert(psi.compatible_indices(psip, 0, 0))
     assert(psi.compatible_indices(psip, Lm1, Lm1))
@@ -671,6 +707,7 @@ def get_E_sects(psi, psip):
         # else, just pass, the overlap is zero.
     return E_sects
 
+# TODO: partly checked
 def transfer_operator(psi_L, psi_R, n_heights=0, parity=0, act_Op=act_id):
     """Returns the transfer operator associated to the unit cell psi_L,
     psi_R with inserted operators whose action is given by *act_Op =
@@ -780,34 +817,6 @@ def transfer_operator(psi_L, psi_R, n_heights=0, parity=0, act_Op=act_id):
                                sects=E_sects, dtype=psi.dtype, invar=False)
     return res
 
-def get_E_L(A,L,B,L_old):
-    """Compute the left transfer operator of the SU2kMPS.
-
-    """
-    psi_L = A.contract(L.diag())
-    if len(L_old.shape) == 1:
-        psi_R = B.contract(L_old.diag().matrix_inv())
-    elif len(L_old.shape) == 3:
-        psi_R = B.contract(L_old.matrix_inv())
-    else:
-        print("In get_E_L: wrong shape of Lambda_old")
-        return 0
-    return transfer_operator(psi_L,psi_R)
-
-def get_E_R(A,L,B,L_old):
-    """Compute the right transfer operator of the SU2kMPS.
-    
-    """
-    if len(L_old.shape) == 1:
-        psi_L = L_old.diag().matrix_inv().contract(A)
-    elif len(L_old.shape) == 3:
-        psi_L = L_old.matrix_inv().contract(A)
-    else:
-        print("In get_E_R: wrong shape of Lambda_old")
-        return 0
-    psi_R = L.diag().contract(B)
-    return transfer_operator(psi_L,psi_R)
-
 def slice_dim_h(dim, height, h):
     """Returns the slice of indices corresponding 
     to height h and the dim corresponding to pos_h
@@ -840,7 +849,8 @@ def contract_E_L(M, E_L):
         M_k = (h,1,h)
         M_block = M[M_k]
         ret_k = (hp,1,hp)
-        ret_block = np.tensordot(M_block, v, axes=([0,2],[0,2])).transpose((1,0,2))
+        coeff = SU2k_data.qdim(E_L.hmax,h) / SU2k_data.qdim(E_L.hmax,hp)
+        ret_block = coeff * np.tensordot(M_block, v, axes=([0,2],[0,2])).transpose((1,0,2))
         if ret_k in ret.sects:
             ret[ret_k] += ret_block
         else:
@@ -867,35 +877,18 @@ def contract_E_R(M, E_R):
             ret[ret_k] = ret_block
     return ret
 
-def trace_L_E_L(E_L):
-    """Implements the trace over left indices of E_L
-    
-    """
-    dims = E_L.shape[0]
-    hs = E_L.heights[0]
-    ret = SU2kMPS_file.SU2kMPS.eye(dims, hs=hs, hmax=E_L.hmax)
-    ret = ret.empty_like()
-    for k,v in E_L.sects.items():
-        h=k[0]
-        hp=k[1]
-        ret_k = (hp,1,hp)
-        ret_block = np.trace(v, axis1=0, axis2=2)
-        if ret_k in ret.sects:
-            ret[ret_k] += ret_block
-        else:
-            ret[ret_k] = ret_block
-    return ret
-
-
 def matvec_E_L(vec, E_L):
     """Implements the left multiplication of E_L with 
     the vector vec, an ndarray of shape (sum(E_L.shape[0]**2),)
     Assume heights are ordered, and for each h, compute
     cur_vec = vec[shape[..]]
-    
+
+    Note: for each sector hp, the result of multiplication is
+    sum_h d_h/d_hp M_h \cdot E[h,hp,h,hp]. Then one can consider 
+    a big vector with all the sectors together.
     """
-    hs = E_L.heights[0]
-    dims = E_L.shape[0]
+    hs = E_L.heights[0] # list of heights of each leg
+    dims = E_L.shape[0] # list of dims of each leg
     ret = np.zeros(vec.shape)
     for h in hs:
         slc_h, dim_h = slice_dim_h(dims, hs, h)
@@ -905,14 +898,19 @@ def matvec_E_L(vec, E_L):
             # vec[slc_h] . E_L[h,hp] -> ret[slc_hp]
             block = E_L[h,hp,h,hp]
             tmp = np.tensordot(curv, block, axes=([0,1],[0,2]))
-            ret[slc_hp] += tmp.reshape(dim_hp**2)
+            # multiply by the appropriate coefficient:
+            coeff = SU2k_data.qdim(E_L.hmax,h) / SU2k_data.qdim(E_L.hmax,hp)
+            ret[slc_hp] += coeff * tmp.reshape(dim_hp**2)
     return ret
 
 def matvec_E_R(vec, E_R):
     """Implements the right multiplication of E_R with 
     the vector vec, an ndarray of shape (sum(E_R.shape[0]**2),)
     Assume heights are ordered.
-    
+
+    Note: for each sector hp, the result of multiplication is
+    sum_h \cdot E[hp,h,hp,h] M_h. Then one can consider 
+    a big vector with all the sectors together.
     """
     hs = E_R.heights[0]
     dims = E_R.shape[0]
@@ -956,13 +954,6 @@ def check_norm_right(B):
                                                      hs=B.heights[0],hmax=B.hmax))
     return is_norm
 
-def get_EEnt(A,Lambda,B,Lambda_old):
-    """Compute the entanglement entropy from the matrices in the argument.
-
-    """
-    A1,A2,Lold_t,B1,B2=mixed_canonical_form(A,Lambda,B,Lambda_old)
-    return get_EEent_mixed_repr(Lold_t)
-
 def get_EEnt_mod(lA,lB,AA,AB):
     """Compute the entanglement entropy from the matrices in the argument.
 
@@ -977,13 +968,14 @@ def get_EEent_mixed_repr(L):
     """
     assert(L.is_mat_like())
     U, s, V, err = L.matrix_svd(remove_small=False)
-    s=s.to_ndarray()
     # Check that sum s_a^2 = 1 and real
-    if np.isreal(s).all() != True or np.isclose(sum(s**2),1.) == False:
-        print ("ERROR: in get_EEent_mixed_repr, sing values not real or not normalized")
-        return 0
+    if s.is_real() == False:
+        raise ValueError("ERROR: in get_EEent_mixed_repr, sing values:\n{}\n not real"\
+                         .format(s))
+    elif np.isclose((s**2).vec_qtrace(),1.) == False:
+        raise ValueError("ERROR: in get_EEent_mixed_repr, sing values not normalized")
     else:
-        return -sum((s**2)*np.log(s**2))
+        return s.vec_EEnt()
     
 def compute_corr_lengths(E_L, N):
     """Computes the first N correlation lengths associated to the left transfer
@@ -1019,7 +1011,7 @@ def fidelity_mod(lB,AA):
 
     """
     # lB here is assumed to be a vector
-    assert(len(lB.shape)==1)
+    assert(lB.is_vec_like())
     lB_mat = lB.diag()
     psi = lB_mat.contract(AA)
     # note: fuse right indices since then Lambda has to be contracted
@@ -1035,75 +1027,7 @@ def fidelity_mod(lB,AA):
     tmp = LambdaL.matrix_dot(lB_mat.conj())
     #print(tmp)
     U,S,V,err,sqrtS = tmp.matrix_svd(norm_S=False,remove_small=False)
-    s_vec = S.to_ndarray()
-    if s_vec.size > 1:
-        return np.sum(s_vec)
-    else: # at initial run, it might be trivial, just return 0
-        return 0
-
-def mixed_canonical_form(A,L,B,L_old,check=False):
-    """Orthogonalize the left and right transfer matrices.
-    Then compute the mixed canonical form, return A1,A2,new_L_old,B1,B2
-    s.t the wf is
-    A1.A2.A1.A2 ... new_L_old B1.B2.B1.B2 ...
-    
-    In the process normalize new_L_old.
-    
-    """
-    X,eta1=compute_X(A,L,B,L_old)
-    Y,eta2=compute_Y(A,L,B,L_old)
-    if np.allclose(eta1, eta2) == False:
-        print("Error: eta1 != eta2")
-        return 0
-    # compute A1, A2:
-    L = L/np.sqrt(eta1)
-    tmp_l = X.contract(A, erase_id=True)
-    tmp_l = tmp_l.contract(L.diag(), erase_id=True)
-    XLold = X.matrix_dot(L_old.diag())
-    tmp_r = B.contract(XLold.matrix_inv())
-    psi = tmp_l.contract(tmp_r)
-    # do not normalize S to 1 
-    A1, s, V, rel_err = psi.svd_2_sites(norm_S=False)
-    A2 = s.diag().contract(V, erase_id=True)
-    # compute B1, B2:
-    LoldY = L_old.diag().matrix_dot(Y)
-    tmp_l = LoldY.matrix_inv().contract(A, erase_id=True)
-    tmp_l = tmp_l.contract(L.diag(), erase_id=True)
-    tmp_r = B.contract(Y, erase_id=True)
-    psi = tmp_l.contract(tmp_r)
-    # do not normalize S to 1 
-    U, s, B2, rel_err = psi.svd_2_sites(norm_S=False)
-    B1 = U.contract(s.diag(), erase_id=True)
-
-    if check:
-        # check normalization:
-        A_new = X.contract(A, erase_id=True)
-        B_new = B.contract(Y, erase_id=True)
-        L_new = L
-        L_old_new = X.matrix_dot(L_old.diag())
-        L_old_new = L_old_new.matrix_dot(Y)
-        E_L = get_E_L(A_new,L_new,B_new,L_old_new)
-        E_R = get_E_R(A_new,L_new,B_new,L_old_new)
-        dims = E_L.shape[0]
-        hs = E_L.heights[0]
-        D = np.sum(np.array(dims)**2)
-        my_id = SU2kMPS_file.SU2kMPS.eye(dims, hs=hs, hmax=E_L.hmax)
-        my_id_v = np.zeros(D)
-        for h in my_id.heights[0]:
-            slc, d = slice_dim_h(dims, hs, h)
-            my_id_v[slc] = my_id[h,1,h].reshape(d**2)
-        is_norm_l = np.allclose(my_id_v,matvec_E_L(my_id_v,E_L))
-        is_norm_r = np.allclose(my_id_v,matvec_E_R(my_id_v,E_R))
-        print("In mixed_canonical_form: E_L,E_R normalized:",
-              is_norm_l and is_norm_r)
-
-    new_L_old = XLold.matrix_dot(Y)
-    norm = new_L_old.transpose(p=(2,1,0)).conj().matrix_dot(new_L_old)
-    norm = np.sqrt(norm.matrix_trace())
-#    print("Norm =", norm)
-    new_L_old /= norm
-    
-    return A1,A2,new_L_old,B1,B2
+    return S.vec_qtrace()
 
 def mixed_canonical_form_mod(lA,lB,AA,AB,check=False):
     """Orthogonalize the left and right transfer matrices.
@@ -1161,76 +1085,14 @@ def mixed_canonical_form_mod(lA,lB,AA,AB,check=False):
         print("left norm:", check_norm_left(A1), check_norm_left(A2))
         print("right norm:", check_norm_right(B1), check_norm_right(B2))
     
+    # normalization
     lB_new = Xt.matrix_dot(Y)
-    norm = lB_new.transpose(p=(2,1,0)).conj().matrix_dot(lB_new)
-    norm = np.sqrt(norm.matrix_trace())
+    norm = lB_new.matrix_dot(lB_new.transpose(p=(2,1,0)).conj())
+    norm = np.sqrt(norm.matrix_qtrace())
 #    print("Norm =", norm)
     lB_new /= norm
     
     return A1,A2,lB_new,B1,B2
-
-def compute_X(A,L,B,L_old,check=False):
-    """Computes X by diagoanalizing the left transfer matrix of the unit
-    cell and compute the dominant eigenvector V_L, V_L = X^\dagger X
-        
-    """
-    E_L = get_E_L(A,L,B,L_old)
-    mv = lambda vec: matvec_E_L(vec, E_L)
-    # Dimension
-    dims = E_L.shape[0]
-    D = np.sum(np.array(dims)**2)
-    # Create linear operator od dim D x D
-    E_L_lin_op = LinearOperator((D, D), matvec=mv, dtype=E_L.dtype)   
-    # Compute the dominant eigenvectors of E_L.
-    # Note, the transfer operator is Hermitian in general, so use eigs
-    vals, vecs = eigs(E_L_lin_op, k=2, which='LM', return_eigenvectors=True)
-#    print("In compute_X: diagonalization done, vals: ", vals)
-    if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
-        vecs=np.real(vecs)
-        vals=np.real(vals)
-    else:
-        warnings.warn("In compute_X: vecs or vals not real")
-    max_ind = np.where(vals==max(vals))[0][0]
-    max_eig = vals[max_ind]
-    eigv = vecs[:,max_ind]
-    assert(np.allclose(linalg.norm(eigv),1.0))
-    # check consistency:
-#    print("check:",np.allclose(matvec_E_L(eigv, E_L), max_eig*eigv))
-    dims = E_L.shape[0]
-    hs = E_L.heights[0]
-    V_L = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_L.hmax, invar=True)
-    # assign blocks
-    for h in hs:
-        slc, d = slice_dim_h(dims, hs, h)
-        V_L.sects[h,1,h] = eigv[slc].reshape((d,1,d))    
-    # check hermiticity
-    V_L_dag = V_L.transpose(p=(2,1,0)).conj()
-    if V_L.allclose(V_L_dag) == False:
-        print("ERROR: first In compute_X: eigv not hermitian. ")
-        return 0
-    # Now determine X_h from the eigendecomposition of V_L:
-    S, U, rel_err = V_L.matrix_eig(hermitian=True)
-    # and if V_L non-negative - as it should be. We have seen that
-    # sometimes the global sign is wrong.  Clearly this can be
-    # reabsorbed in the definition of V_L, so check if all negative,
-    # just return -w
-    w = S.to_ndarray()
-    if np.all(w<=0):
-        sign = -1.
-    elif np.all(w>=0): 
-        sign = 1.
-    else: #means neither all >=0 nor all <=0, sign changes.
-        warnings.warn("ERROR: In compute_X: V_L not >= 0, w ",w)
-        return 0    
-    # Finally compute V_L = X^dagger X:
-    S = sign*S
-    X = S.sqrt().diag().matrix_dot(U.conj().transpose(p=(2,1,0)))
-    # Sanity check
-    if check:
-        tmp=X.transpose(p=(2,1,0)).conj().matrix_dot(X)
-        assert(tmp.allclose(sign*V_L))
-
-    return X, max_eig
 
 def compute_X_mod(A,B,check=False):
     """Computes X by diagonalizing the left transfer matrix of the unit
@@ -1252,23 +1114,29 @@ def compute_X_mod(A,B,check=False):
     # Compute the dominant eigenvectors of E_L.
     # Note, the transfer operator is Hermitian in general, so use eigs
     vals, vecs = eigs(E_L_lin_op, k=2, which='LM', return_eigenvectors=True)
-#    print("In compute_X: diagonalization done, vals: ", vals)
-    if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
-        vecs=np.real(vecs)
-        vals=np.real(vals)
-    else:
-        warnings.warn("In compute_X_mod: vecs or vals not real")
+#    print("In compute_X_mod: diagonalization done, vals: ", vals)
+    # check simple eigenvalue of E_L:
+    if np.allclose(vals[0],vals[1]):
+        raise ValueError("In compute_X_mod: eigenvalues of E_L not simple: vals = ",
+                         vals)
+    # in principle, here quantum FP guarantees that dominant eigenvec is > 0.
     max_ind = np.where(vals==max(vals))[0][0]
     max_eig = vals[max_ind]
     eigv = vecs[:,max_ind]
+    if np.all(np.imag(eigv) == np.zeros(eigv.shape)) and np.all(np.imag(max_eig) == 0):
+        eigv=np.real(eigv)
+        max_eig=np.real(max_eig)
+    else:
+        warnings.warn("In compute_X_mod: vec or val not real")
     assert(np.allclose(linalg.norm(eigv),1.0))
-    # check consistency:
     if check:
+        # check consistency:
         print("check E_L*eigv=eta*eigv:",
-              np.allclose(matvec_E_L(eigv, E_L), max_eig*eigv))
+              np.allclose(matvec_E_L(eigv, E_L), max_eig*eigv))    
     dims = E_L.shape[0]
     hs = E_L.heights[0]
-    V_L = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_L.hmax, invar=True)
+    V_L = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], 
+                               hmax=E_L.hmax, invar=True)
     # assign blocks
     for h in hs:
         slc, d = slice_dim_h(dims, hs, h)
@@ -1277,8 +1145,7 @@ def compute_X_mod(A,B,check=False):
     V_L_dag = V_L.transpose(p=(2,1,0)).conj()
     if check:
         if V_L.allclose(V_L_dag) == False:
-            print("ERROR: first In compute_X_mod: eigv not hermitian. ")
-            return 0
+            raise ValueError("In compute_X_mod: eigv not hermitian.")
         # check V_L * E_L = max_eig * V_L
         ret=contract_E_L(V_L,E_L)
         print("check V_L * E_L=eta*V_L:", ret.allclose(max_eig*V_L))
@@ -1286,10 +1153,10 @@ def compute_X_mod(A,B,check=False):
     V_L = (V_L + V_L_dag)/2
     # Now determine X_h from the eigendecomposition of V_L:
     S, U, rel_err = V_L.matrix_eig(hermitian=True)
-    # and if V_L non-negative - as it should be. We have seen that
-    # sometimes the global sign is wrong.  Clearly this can be
-    # reabsorbed in the definition of V_L, so check if all negative,
-    # just use abs(w), unless the sign oscillates which is an error
+    # and if V_L is positive-definite. We have seen that sometimes the
+    # global sign is wrong.  Clearly this can be reabsorbed in the
+    # definition of V_L, so check if all negative, just use abs(w),
+    # unless the sign oscillates which is an error
     tol = 1e-12 #tolerance for a number to be considered zero
     w = S.to_ndarray()
     if np.all(w > -tol):
@@ -1297,9 +1164,7 @@ def compute_X_mod(A,B,check=False):
     elif np.all(w < tol): 
         sign = -1.
     else: #means neither all >=0 nor all <=0, sign changes.
-        print("ERROR: In compute_X: V_L not >= 0")
-        print(w)
-        sys.exit(1)
+        raise ValueError("In compute_X_mod: V_L not >= 0:\n S =",S)
     # Finally compute V_L = X^dagger X:
     S = S.abs()
     X = S.sqrt().diag().matrix_dot(U.conj().transpose(p=(2,1,0)))
@@ -1309,69 +1174,6 @@ def compute_X_mod(A,B,check=False):
         print("In compute_X_mod: XXdag=sign*VL", tmp.allclose(sign*V_L))
         
     return X, max_eig
-
-def compute_Y(A,L,B,L_old,check=False):
-    """Computes Y by diagoanalizing the right transfer matrix of the unit
-    cell and compute the dominant eigenvector V_R, V_R = Y Y^dagger
-        
-    """
-    E_R = get_E_R(A,L,B,L_old)
-    mv = lambda vec: matvec_E_R(vec, E_R)
-    # Dimension
-    dims = E_R.shape[0]
-    D = np.sum(np.array(dims)**2)
-    # Create linear operator od dim D x D
-    E_R_lin_op = LinearOperator((D, D), matvec=mv, dtype=E_R.dtype)   
-    # Compute the dominant eigenvectors of E_R.
-    # Note, the transfer operator is Hermitian in general, so use eigs
-    vals, vecs = eigs(E_R_lin_op, k=2, which='LM', return_eigenvectors=True)
-#    print("In compute_Y: diagonalization done, vals: ", vals)
-    if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
-        vecs=np.real(vecs)
-        vals=np.real(vals)
-    else:
-        warnings.warn("In compute_Y: vecs or vals not real")
-    max_ind = np.where(vals==max(vals))[0][0]
-    max_eig = vals[max_ind]
-    eigv = vecs[:,max_ind]
-    assert(np.allclose(linalg.norm(eigv),1.0))
-    # check consistency:
-#    print("check:",np.allclose(matvec_E_R(eigv, E_R), max_eig*eigv))
-    dims = E_R.shape[0]
-    hs = E_R.heights[0]
-    V_R = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_R.hmax, invar=True)
-    # assign blocks
-    for h in hs:
-        slc, d = slice_dim_h(dims, hs, h)
-        V_R.sects[h,1,h] = eigv[slc].reshape((d,1,d))    
-    # check hermiticity
-    V_R_dag = V_R.transpose(p=(2,1,0)).conj()
-    if V_R.allclose(V_R_dag) == False:
-        print("ERROR: first In compute_Y: eigv not hermitian.")
-        return 0
-    # Now determine Y_h from the eigendecomposition of V_R:
-    S, U, rel_err = V_R.matrix_eig(hermitian=True)
-    # and if V_R non-negative - as it should be. We have seen that
-    # sometimes the global sign is wrong.  Clearly this can be
-    # reabsorbed in the definition of V_R, so check if all negative,
-    # just return -w
-    w = S.to_ndarray()
-    if np.all(w<=0):
-        sign = -1.
-    elif np.all(w>=0): 
-        sign = 1.
-    else: #means neither all >=0 nor all <=0, sign changes.
-        warnings.warn("ERROR: In compute_Y: V_R not >= 0, w ",w)
-        return 0    
-    # Finally compute V_R = Y Y^dagger:
-    S = sign*S
-    Y = U.matrix_dot(S.sqrt().diag())
-    # Sanity check
-    if check:
-        tmp=Y.matrix_dot(Y.transpose(p=(2,1,0)).conj())
-        assert(tmp.allclose(sign*V_R))
-
-    return Y, max_eig
 
 def compute_Y_mod(AA,AB,check=False):
     """Computes Y by diagonalizing the right transfer matrix of the unit
@@ -1388,21 +1190,28 @@ def compute_Y_mod(AA,AB,check=False):
     # Compute the dominant eigenvectors of E_R.
     # Note, the transfer operator is Hermitian in general, so use eigs
     vals, vecs = eigs(E_R_lin_op, k=2, which='LM', return_eigenvectors=True)
-#    print("In compute_Y: diagonalization done, vals: ", vals)
-    if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
-        vecs=np.real(vecs)
-        vals=np.real(vals)
-    else:
-        warnings.warn("In compute_Y: vecs or vals not real")
+#    print("In compute_Y_mod: diagonalization done, vals: ", vals)
+    # check simple eigenvalue of E_R:
+    if np.allclose(vals[0],vals[1]):
+        raise ValueError("In compute_Y_mod: eigenvalues of E_R not simple: vals = ",
+                  vals)
+    # in principle, here quantum FP guarantees that dominant eigenvec is > 0.
     max_ind = np.where(vals==max(vals))[0][0]
     max_eig = vals[max_ind]
     eigv = vecs[:,max_ind]
+    if np.all(np.imag(eigv) == np.zeros(eigv.shape)) and np.all(np.imag(max_eig) == 0):
+        eigv=np.real(eigv)
+        max_eig=np.real(max_eig)
+    else:
+        warnings.warn("In compute_X_mod: vec or val not real")
     assert(np.allclose(linalg.norm(eigv),1.0))
-    # check consistency:
-#    print("check:",np.allclose(matvec_E_R(eigv, E_R), max_eig*eigv))
+    if check:
+        # check consistency:
+        print("check:",np.allclose(matvec_E_R(eigv, E_R), max_eig*eigv))
     dims = E_R.shape[0]
     hs = E_R.heights[0]
-    V_R = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_R.hmax, invar=True)
+    V_R = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], 
+                               hmax=E_R.hmax, invar=True)
     # assign blocks
     for h in hs:
         slc, d = slice_dim_h(dims, hs, h)
@@ -1414,18 +1223,16 @@ def compute_Y_mod(AA,AB,check=False):
         return 0
     # Now determine Y_h from the eigendecomposition of V_R:
     S, U, rel_err = V_R.matrix_eig(hermitian=True)
-    # and if V_R non-negative - as it should be. We have seen that
-    # sometimes the global sign is wrong.  Clearly this can be
-    # reabsorbed in the definition of V_R, so check if all negative,
-    # just return -w
+    # and if V_R positive-definite. We have seen that sometimes the
+    # global sign is wrong.  Clearly this can be reabsorbed in the
+    # definition of V_R, so check if all negative, just return -w
     w = S.to_ndarray()
     if np.all(w<=0):
         sign = -1.
     elif np.all(w>=0): 
         sign = 1.
     else: #means neither all >=0 nor all <=0, sign changes.
-        warnings.warn("ERROR: In compute_Y: V_R not >= 0, w ",w)
-        return 0    
+        raise ValueError("In compute_Y_mod: V_R not >= 0:\n S =",S)
     # Finally compute V_R = Y Y^dagger:
     S = sign*S
     Y = U.matrix_dot(S.sqrt().diag())
@@ -1454,8 +1261,10 @@ def multiply_Lold_and_trace(E, L_old):
         m = L_old[hp,1,hp]
         shp = m.shape[0]
         m = m.reshape((shp,shp))
+        # contribution of fusion tree is dh
         vp = np.tensordot(vp,m,axes=(1,0))
-        res += np.tensordot(np.conj(m),vp,axes=([0,1],[0,1]))
+        dh = SU2k_data.qdim(E.hmax,h)
+        res += dh * np.tensordot(np.conj(m),vp,axes=([0,1],[0,1]))
     return res
 
 def multiply_transfer_operators(E1, E2):
@@ -1494,7 +1303,8 @@ def one_point_function(A1, A2, L_old, n_heights=0, parity=0, act_Op=act_id):
     E = transfer_operator(A1, A2, n_heights=n_heights, parity=parity,
                           act_Op=act_Op)
     return multiply_Lold_and_trace(E, L_old)
- 
+
+# TO BE CHECKED
 def two_point_function(A1, A2, L_old, x, shift = 0, n_heights_1=0, n_heights_2=0, 
                        act_Op_1=act_id, act_Op_2=act_id):
     """Computes <psi|Op_1(1) Op_2(x)|psi> if shift % 2 = 0 and
@@ -1503,46 +1313,60 @@ def two_point_function(A1, A2, L_old, x, shift = 0, n_heights_1=0, n_heights_2=0
     See transfer_operator for explanation of arguments. 1 and x stand
     for the first site on which the operators act.
 
+    Returns 2 pt function and vev1, vev2.
+
     """
     E_1 = transfer_operator(A1, A2, n_heights=n_heights_1, parity=shift,
                             act_Op=act_Op_1)
     E_2 = transfer_operator(A1, A2, n_heights=n_heights_2, parity=x+shift,
                             act_Op=act_Op_2)
     E = transfer_operator(A1, A2, n_heights=0, parity=0, act_Op=act_id)
-    # l = number of id transf operators from E_1 to E_2
-
-    print("In two_point_function: TODO: Double check offset and shift!!!!!!")
     
+    # check op1 and set offset
     if n_heights_1 == 1:
         if shift == 0 or (shift == 1 and x % 2 == 0):
             offset = 1
         else: # shift=1 and x odd
             offset = 0
-    elif n_heights_1 == 3 and shift == 0:
-        offest = 1
-    elif (n_heights_1 == 4 and shift == 0) or (n_heights_1 == 5 and shift == 0):
-        offset = 2
-    elif n_heights_1 == 6 and shift == 0:
+    elif n_heights_1 == 4:
         offset = 3
     else:
         print("In two_point_function: not implemented yet")
+    print('shift,x,offset',shift,x,offset)
+    vev1 = one_point_function(A1, A2, L_old, n_heights=n_heights_1, parity=shift, 
+                              act_Op=act_Op_1)
+
+    # check op2
+    if n_heights_2 == 4:
+        if shift == 1:
+            x = x + 1
+        E_2 = transfer_operator(A1, A2, n_heights=n_heights_2, parity=x+1,
+                                act_Op=act_Op_2)
+    else:
+        print("In two_point_function: not implemented yet")
+    vev2 = one_point_function(A1, A2, L_old, n_heights=n_heights_2, parity=x+1, 
+                              act_Op=act_Op_2)
+
+    # l = number of id transf operators from E_1 to E_2
     if x % 2 == 0:
         l = int(x/2)-offset
     else:
-        l = int((x-1)/2)-offset
+        l = int((x+1)/2)-offset
     curE = E_1
+    print('l',l)
 
-    print('shift,x,offset',shift,x,offset)
     for n in range(l):
         curE = multiply_transfer_operators(curE, E)
     curE = multiply_transfer_operators(curE, E_2)
     
-    return multiply_Lold_and_trace(curE, L_old)
+    return multiply_Lold_and_trace(curE, L_old), vev1, vev2
 
 
 def two_point_function_range_x(A1, A2, L_old, x1, xN, n_heights_1=0, n_heights_2=0, 
-                                         act_Op_1=act_id, act_Op_2=act_id):
+                               act_Op_1=act_id, act_Op_2=act_id):
     """Compute < Op1(x1) Op2(x) > for all x1 < x <= xN
+
+    Note: site numbering starts from 0.
 
     """
     # first transfer operator
@@ -1559,24 +1383,456 @@ def two_point_function_range_x(A1, A2, L_old, x1, xN, n_heights_1=0, n_heights_2
     dist = []
     corr = []
     curE = E_1
-    if n_heights_1 == 1 and n_heights_2 == 1:
+    if n_heights_1 == 1:
         if x1 % 2 == 0:
             start = x1 + 2
         else:
             start = x1 + 1
-        # note: start is always even
-        for x in range(start,xN+1):
-            i = x - x1
-            if x % 2 == 0:
-                resE = multiply_transfer_operators(curE, E_2_ev)
-            else:
-                resE = multiply_transfer_operators(curE, E_2_odd)
-            my_corr = multiply_Lold_and_trace(resE, L_old)
-            dist.append(i)
-            corr.append(my_corr)
-            # every two x's update curE
-            if x % 2 == 1 and x != xN:
-                curE = multiply_transfer_operators(curE, E)
+        offset = 0
+    elif n_heights_1 == 4:
+        if x1 % 2 == 0:
+            start = x1 + 2
+        else:
+            start = x1 + 3
+        offset = 1
+    elif n_heights_1 == 5:
+        if x1 % 2 == 0:
+            start = x1 + 5
+        else:
+            start = x1 + 3
+        offset = 1
+    else:
+        print("In two_point_function_range_x: case not covered")
+
+    # note: start is always even
+    for x in range(start,xN+1):
+        i = x - x1 + offset
+        if x % 2 == 0:
+            resE = multiply_transfer_operators(curE, E_2_ev)
+        else:
+            resE = multiply_transfer_operators(curE, E_2_odd)
+        my_corr = multiply_Lold_and_trace(resE, L_old)
+        dist.append(i)
+        corr.append(my_corr)
+        # every two x's update curE
+        if x % 2 == 1 and x != xN:
+            curE = multiply_transfer_operators(curE, E)
 #            print('x,i,my_corr',x,i,my_corr)
     
     return dist, corr
+
+######################
+# OLD, to be removed #
+######################
+
+# def init_itebd(pars):
+#     """init itebd either from file or by computing 4 anyons problem
+
+#     """
+#     # Open file previous trunc_D and previous eps and dt
+#     min_D = 4
+#     my_pars = pars.copy()
+#     trunc_D = pars['chi']
+#     for cur_D in range(trunc_D, min_D - 1, -1):
+#         eps = pars['eps']
+#         while eps < 1e-04:
+#             dt = pars['dt']
+#             while dt < 0.1:
+#                 file_name = 'init/SU2k_itebd_'
+#                 file_name += 'hmax_'+str(pars['hmax'])+'_'
+#                 file_name += 'chi_'+str(cur_D)+'_'
+#                 file_name += 'dt_'+str(dt)+'_'
+#                 file_name += 'eps_'+'{:.0e}'.format(eps)
+#                 try:
+#                     # Use numpy routines
+#                     with open(file_name, 'rb') as f:                    
+#                         A = pickle.load(f)
+#                         Lambda = pickle.load(f)
+#                         B = pickle.load(f)
+#                         Lambda_old = pickle.load(f)
+#                         print('init_itebd: from file', file_name)
+#                         return A, Lambda, B, Lambda_old
+#                 except IOError:
+#                     print('could not load',file_name)
+#                 dt *= 10
+#             eps *= 10
+
+#     # If here it means that no file has been found, and curD = min_D
+#     # so init_itebd_4 is called
+#     print('init_itebd: from 4 anyons')
+#     A, Lambda, B, Lambda_old = init_itebd_4(pars['hmax'])
+
+#     return A, Lambda, B, Lambda_old
+
+# def recursion(A,Lambda,B,Lambda_old,max_it,pars,save):
+#     """Run the recursion. If the naive entropy has converged, run until
+#     the true entropy has converged.  This avoids computing the mixed
+#     representation which is costly in the first few iterations.
+
+#     max_it is maximum number of iterations. Return the converged
+#     A,Lambda,B,Lambda_old
+
+#     """
+#     print('Recursion starts...')
+
+
+#     ##DEBUG
+#     lA,lB,AA,AB = orig_to_mod(A,Lambda,B,Lambda_old)
+#     At,Lt,Bt,Loldt=mod_to_orig(lA,lB,AA,AB)
+#     print("A-At", A-At)
+#     print("B-Bt", B-Bt)
+#     print("L-Lt", Lambda-Lt)
+#     print("Lold-Loldt", Lambda_old-Loldt)
+
+    
+#     beta = SU2k_data.qdim(pars['hmax'],2)
+#     eps = pars['eps']
+#     delta_t = pars['dt']
+#     trunc_D = pars['chi']
+#     EEnt_naive_prev = 0
+#     EEnt_naive_conv = False
+#     for n in range(max_it):
+#         # print("***************************")
+#         print("Iteration num ", n)
+#         A,Lambda,B,Lambda_old=update_matrices(A, Lambda, B, Lambda_old,
+#                                               beta, delta_t, trunc_D)
+#         # lA,lB,AA,AB=update_matrices_mod(lA,lB,AA,AB,
+#         #                                 beta, delta_t, trunc_D)
+        
+#         #### DEBUG
+#         # lAt,lBt,AAt,ABt = orig_to_mod(A,Lambda,B,Lambda_old)
+#         # print("AA-AAt", AA-AAt)
+#         # print("AB-ABt", AB-ABt)
+#         # print("lA-lAt", lA-lAt)
+#         # print("lB-lBt", lB-lBt)
+        
+#         # print("Are equal:", lAt.allclose(lA),lBt.allclose(lB),
+#         #                     AAt.allclose(AA),ABt.allclose(AB))
+
+#         # if n==4:
+#         #     print("AA-AAt", AA-AAt)
+#         #     print("AB-ABt", AB-ABt)
+
+#         # if n>3:
+#         #     EEnt = get_EEnt(A,Lambda,B,Lambda_old)
+#         #     print(n,EEnt)
+        
+#         # # if n%2 ==1 and n>5:
+#         # #     print("n=",n,", EEnt=",get_EEnt(A,Lambda,B,Lambda_old))
+        
+#         # # check convergence of entropy. Recall that even n are
+#         # # intermediate steps, so check only for odd n.
+#         # if n % 2 == 1:
+#         #     if not EEnt_naive_conv:
+#         #         L_ndarray = Lambda.to_ndarray()
+#         #         EEnt_naive = -np.sum((L_ndarray**2)*np.log(L_ndarray**2))   
+#         #         if np.abs(EEnt_naive_prev - EEnt_naive) < eps:
+#         #             print("EEnt_naive converged at n =",n)
+#         #             print("EEnt_naive =", EEnt_naive, "eps=",eps," Now converge EEnt")
+#         #             EEnt_prev = get_EEnt(A,Lambda,B,Lambda_old)
+#         #             EEnt_naive_conv = True
+#         #             continue
+#         #         else:
+#         #             if n == max_it -1:
+#         #                 print("Reached max_it and not converged, Delta EEnt_naive",
+#         #                       np.abs(EEnt_naive_prev - EEnt_naive))
+#         #             else:
+#         #                 EEnt_naive_prev = EEnt_naive
+#         #     else: # EEnt_naive_conv
+#         #         # check entropy and save to file every 500 iterations:
+#         #         if save and n % 500 == 1:
+#         #             print(n)
+#         #             save_to_file(A,Lambda,B,Lambda_old,pars)
+#         #             EEnt_prev = get_EEnt(A,Lambda,B,Lambda_old)
+#         #             # update matrices
+#         #             A,Lambda,B,Lambda_old=update_matrices(A, Lambda, B,
+#         #                                                   Lambda_old,
+#         #                                                   beta, delta_t, trunc_D)
+#         #             A,Lambda,B,Lambda_old=update_matrices(A, Lambda, B,
+#         #                                                   Lambda_old,
+#         #                                                   beta, delta_t, trunc_D)
+#         #             EEnt = get_EEnt(A,Lambda,B,Lambda_old)
+#         #             print("Delta EEnt", np.abs(EEnt_prev - EEnt))
+#         #             if np.abs(EEnt_prev - EEnt) < eps:
+#         #                 print("EEnt converged at n =",n," EEnt =", EEnt,
+#         #                       "eps=",eps)
+#         #                 break
+#         #             else:
+#         #                 if n == max_it -1:
+#         #                     print("Reached max_it and not converged,Delta EEnt",
+#         #                           np.abs(EEnt_prev - EEnt))
+#         #                 else:
+#         #                     EEnt_prev = EEnt                
+                
+#     return A,Lambda,B,Lambda_old
+
+
+# def save_to_file(A, Lambda, B, Lambda_old, pars):
+#     """Dump to file the matrices using pickle
+
+#     """
+#     # Save data A, Lambda, B, Lambda_old to start next D recurrence
+#     # from it or for computing entropy, correlators etc
+#     file_name = 'init/SU2k_itebd_'
+#     file_name += 'hmax_'+str(pars['hmax'])+'_'
+#     file_name += 'a_'+str(pars['height0'])+'_'
+#     file_name += 'b_'+str(pars['heightL'])+'_'
+#     file_name += 'chi_'+str(pars['chi'])+'_'
+#     file_name += 'dt_'+str(pars['dt'])+'_'
+#     file_name += 'eps_'+str(pars['eps'])
+#     # Use numpy routines
+#     with open(file_name, 'wb') as f:
+#         pickle.dump(A, f)
+#         pickle.dump(Lambda, f)
+#         pickle.dump(B, f)
+#         pickle.dump(Lambda_old, f)
+#     print('save_to_file: saved to ', file_name)
+
+
+# def mixed_canonical_form(A,L,B,L_old,check=False):
+#     """Orthogonalize the left and right transfer matrices.
+#     Then compute the mixed canonical form, return A1,A2,new_L_old,B1,B2
+#     s.t the wf is
+#     A1.A2.A1.A2 ... new_L_old B1.B2.B1.B2 ...
+    
+#     In the process normalize new_L_old.
+    
+#     """
+#     X,eta1=compute_X(A,L,B,L_old)
+#     Y,eta2=compute_Y(A,L,B,L_old)
+#     if np.allclose(eta1, eta2) == False:
+#         print("Error: eta1 != eta2")
+#         return 0
+#     # compute A1, A2:
+#     L = L/np.sqrt(eta1)
+#     tmp_l = X.contract(A, erase_id=True)
+#     tmp_l = tmp_l.contract(L.diag(), erase_id=True)
+#     XLold = X.matrix_dot(L_old.diag())
+#     tmp_r = B.contract(XLold.matrix_inv())
+#     psi = tmp_l.contract(tmp_r)
+#     # do not normalize S to 1 
+#     A1, s, V, rel_err = psi.svd_2_sites(norm_S=False)
+#     A2 = s.diag().contract(V, erase_id=True)
+#     # compute B1, B2:
+#     LoldY = L_old.diag().matrix_dot(Y)
+#     tmp_l = LoldY.matrix_inv().contract(A, erase_id=True)
+#     tmp_l = tmp_l.contract(L.diag(), erase_id=True)
+#     tmp_r = B.contract(Y, erase_id=True)
+#     psi = tmp_l.contract(tmp_r)
+#     # do not normalize S to 1 
+#     U, s, B2, rel_err = psi.svd_2_sites(norm_S=False)
+#     B1 = U.contract(s.diag(), erase_id=True)
+
+#     if check:
+#         # check normalization:
+#         A_new = X.contract(A, erase_id=True)
+#         B_new = B.contract(Y, erase_id=True)
+#         L_new = L
+#         L_old_new = X.matrix_dot(L_old.diag())
+#         L_old_new = L_old_new.matrix_dot(Y)
+#         E_L = get_E_L(A_new,L_new,B_new,L_old_new)
+#         E_R = get_E_R(A_new,L_new,B_new,L_old_new)
+#         dims = E_L.shape[0]
+#         hs = E_L.heights[0]
+#         D = np.sum(np.array(dims)**2)
+#         my_id = SU2kMPS_file.SU2kMPS.eye(dims, hs=hs, hmax=E_L.hmax)
+#         my_id_v = np.zeros(D)
+#         for h in my_id.heights[0]:
+#             slc, d = slice_dim_h(dims, hs, h)
+#             my_id_v[slc] = my_id[h,1,h].reshape(d**2)
+#         is_norm_l = np.allclose(my_id_v,matvec_E_L(my_id_v,E_L))
+#         is_norm_r = np.allclose(my_id_v,matvec_E_R(my_id_v,E_R))
+#         print("In mixed_canonical_form: E_L,E_R normalized:",
+#               is_norm_l and is_norm_r)
+
+#     new_L_old = XLold.matrix_dot(Y)
+#     norm = new_L_old.transpose(p=(2,1,0)).conj().matrix_dot(new_L_old)
+#     norm = np.sqrt(norm.matrix_trace())
+# #    print("Norm =", norm)
+#     new_L_old /= norm
+    
+#     return A1,A2,new_L_old,B1,B2
+
+
+# def compute_X(A,L,B,L_old,check=False):
+#     """Computes X by diagoanalizing the left transfer matrix of the unit
+#     cell and compute the dominant eigenvector V_L, V_L = X^\dagger X
+        
+#     """
+#     E_L = get_E_L(A,L,B,L_old)
+#     mv = lambda vec: matvec_E_L(vec, E_L)
+#     # Dimension
+#     dims = E_L.shape[0]
+#     D = np.sum(np.array(dims)**2)
+#     # Create linear operator od dim D x D
+#     E_L_lin_op = LinearOperator((D, D), matvec=mv, dtype=E_L.dtype)   
+#     # Compute the dominant eigenvectors of E_L.
+#     # Note, the transfer operator is Hermitian in general, so use eigs
+#     vals, vecs = eigs(E_L_lin_op, k=2, which='LM', return_eigenvectors=True)
+# #    print("In compute_X: diagonalization done, vals: ", vals)
+#     if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
+#         vecs=np.real(vecs)
+#         vals=np.real(vals)
+#     else:
+#         warnings.warn("In compute_X: vecs or vals not real")
+#     max_ind = np.where(vals==max(vals))[0][0]
+#     max_eig = vals[max_ind]
+#     eigv = vecs[:,max_ind]
+#     assert(np.allclose(linalg.norm(eigv),1.0))
+#     # check consistency:
+# #    print("check:",np.allclose(matvec_E_L(eigv, E_L), max_eig*eigv))
+#     dims = E_L.shape[0]
+#     hs = E_L.heights[0]
+#     V_L = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_L.hmax, invar=True)
+#     # assign blocks
+#     for h in hs:
+#         slc, d = slice_dim_h(dims, hs, h)
+#         V_L.sects[h,1,h] = eigv[slc].reshape((d,1,d))    
+#     # check hermiticity
+#     V_L_dag = V_L.transpose(p=(2,1,0)).conj()
+#     if V_L.allclose(V_L_dag) == False:
+#         print("ERROR: first In compute_X: eigv not hermitian. ")
+#         return 0
+#     # Now determine X_h from the eigendecomposition of V_L:
+#     S, U, rel_err = V_L.matrix_eig(hermitian=True)
+#     # and if V_L non-negative - as it should be. We have seen that
+#     # sometimes the global sign is wrong.  Clearly this can be
+#     # reabsorbed in the definition of V_L, so check if all negative,
+#     # just return -w
+#     w = S.to_ndarray()
+#     if np.all(w<=0):
+#         sign = -1.
+#     elif np.all(w>=0): 
+#         sign = 1.
+#     else: #means neither all >=0 nor all <=0, sign changes.
+#         warnings.warn("ERROR: In compute_X: V_L not >= 0, w ",w)
+#         return 0    
+#     # Finally compute V_L = X^dagger X:
+#     S = sign*S
+#     X = S.sqrt().diag().matrix_dot(U.conj().transpose(p=(2,1,0)))
+#     # Sanity check
+#     if check:
+#         tmp=X.transpose(p=(2,1,0)).conj().matrix_dot(X)
+#         assert(tmp.allclose(sign*V_L))
+
+#     return X, max_eig
+
+# def compute_Y(A,L,B,L_old,check=False):
+#     """Computes Y by diagoanalizing the right transfer matrix of the unit
+#     cell and compute the dominant eigenvector V_R, V_R = Y Y^dagger
+        
+#     """
+#     E_R = get_E_R(A,L,B,L_old)
+#     mv = lambda vec: matvec_E_R(vec, E_R)
+#     # Dimension
+#     dims = E_R.shape[0]
+#     D = np.sum(np.array(dims)**2)
+#     # Create linear operator od dim D x D
+#     E_R_lin_op = LinearOperator((D, D), matvec=mv, dtype=E_R.dtype)   
+#     # Compute the dominant eigenvectors of E_R.
+#     # Note, the transfer operator is Hermitian in general, so use eigs
+#     vals, vecs = eigs(E_R_lin_op, k=2, which='LM', return_eigenvectors=True)
+# #    print("In compute_Y: diagonalization done, vals: ", vals)
+#     if np.all(np.imag(vecs) == np.zeros(vecs.shape)) and np.all(np.imag(vals) == np.zeros(2)):
+#         vecs=np.real(vecs)
+#         vals=np.real(vals)
+#     else:
+#         warnings.warn("In compute_Y: vecs or vals not real")
+#     max_ind = np.where(vals==max(vals))[0][0]
+#     max_eig = vals[max_ind]
+#     eigv = vecs[:,max_ind]
+#     assert(np.allclose(linalg.norm(eigv),1.0))
+#     # check consistency:
+# #    print("check:",np.allclose(matvec_E_R(eigv, E_R), max_eig*eigv))
+#     dims = E_R.shape[0]
+#     hs = E_R.heights[0]
+#     V_R = SU2kMPS_file.SU2kMPS(shape=[dims,[1],dims], heights=[hs,[1],hs], hmax=E_R.hmax, invar=True)
+#     # assign blocks
+#     for h in hs:
+#         slc, d = slice_dim_h(dims, hs, h)
+#         V_R.sects[h,1,h] = eigv[slc].reshape((d,1,d))    
+#     # check hermiticity
+#     V_R_dag = V_R.transpose(p=(2,1,0)).conj()
+#     if V_R.allclose(V_R_dag) == False:
+#         print("ERROR: first In compute_Y: eigv not hermitian.")
+#         return 0
+#     # Now determine Y_h from the eigendecomposition of V_R:
+#     S, U, rel_err = V_R.matrix_eig(hermitian=True)
+#     # and if V_R non-negative - as it should be. We have seen that
+#     # sometimes the global sign is wrong.  Clearly this can be
+#     # reabsorbed in the definition of V_R, so check if all negative,
+#     # just return -w
+#     w = S.to_ndarray()
+#     if np.all(w<=0):
+#         sign = -1.
+#     elif np.all(w>=0): 
+#         sign = 1.
+#     else: #means neither all >=0 nor all <=0, sign changes.
+#         warnings.warn("ERROR: In compute_Y: V_R not >= 0, w ",w)
+#         return 0    
+#     # Finally compute V_R = Y Y^dagger:
+#     S = sign*S
+#     Y = U.matrix_dot(S.sqrt().diag())
+#     # Sanity check
+#     if check:
+#         tmp=Y.matrix_dot(Y.transpose(p=(2,1,0)).conj())
+#         assert(tmp.allclose(sign*V_R))
+
+#     return Y, max_eig
+
+
+# def get_E_L(A,L,B,L_old):
+#     """Compute the left transfer operator of the SU2kMPS.
+
+#     """
+#     psi_L = A.contract(L.diag())
+#     if len(L_old.shape) == 1:
+#         psi_R = B.contract(L_old.diag().matrix_inv())
+#     elif len(L_old.shape) == 3:
+#         psi_R = B.contract(L_old.matrix_inv())
+#     else:
+#         print("In get_E_L: wrong shape of Lambda_old")
+#         return 0
+#     return transfer_operator(psi_L,psi_R)
+
+# def get_E_R(A,L,B,L_old):
+#     """Compute the right transfer operator of the SU2kMPS.
+    
+#     """
+#     if len(L_old.shape) == 1:
+#         psi_L = L_old.diag().matrix_inv().contract(A)
+#     elif len(L_old.shape) == 3:
+#         psi_L = L_old.matrix_inv().contract(A)
+#     else:
+#         print("In get_E_R: wrong shape of Lambda_old")
+#         return 0
+#     psi_R = L.diag().contract(B)
+#     return transfer_operator(psi_L,psi_R)
+
+
+# def trace_L_E_L(E_L):
+#     """Implements the trace over left indices of E_L
+    
+#     """
+#     dims = E_L.shape[0]
+#     hs = E_L.heights[0]
+#     ret = SU2kMPS_file.SU2kMPS.eye(dims, hs=hs, hmax=E_L.hmax)
+#     ret = ret.empty_like()
+#     for k,v in E_L.sects.items():
+#         h=k[0]
+#         hp=k[1]
+#         ret_k = (hp,1,hp)
+#         ret_block = np.trace(v, axis1=0, axis2=2)
+#         if ret_k in ret.sects:
+#             ret[ret_k] += ret_block
+#         else:
+#             ret[ret_k] = ret_block
+#     return ret
+
+
+# def get_EEnt(A,Lambda,B,Lambda_old):
+#     """Compute the entanglement entropy from the matrices in the argument.
+
+#     """
+#     A1,A2,Lold_t,B1,B2=mixed_canonical_form(A,Lambda,B,Lambda_old)
+#     return get_EEent_mixed_repr(Lold_t)
